@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c0f0d" />
+    <meta name="description" content="本地单人美式轮盘。三十八格，筹码只存在这台浏览器里。" />
+    <title>美式轮盘</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <h1>美式轮盘</h1>
+            <p>本地单人 · 三十八格</p>
+          </div>
+        </div>
+        <div class="meters">
+          <div class="meter">
+            <span class="k">余额</span>
+            <span class="v" id="balance">1,000</span>
+          </div>
+          <div class="meter stake">
+            <span class="k">本局下注</span>
+            <span class="v" id="wager">0</span>
+          </div>
+        </div>
+        <button type="button" class="btn-ghost" id="open-settings">设置</button>
+      </header>
+
+      <main class="stage">
+        <section class="wheel-panel" aria-label="轮盘">
+          <div id="wheel-root"></div>
+          <div class="history-block">
+            <h2>最近开奖</h2>
+            <div class="history" id="history"></div>
+          </div>
+        </section>
+        <section class="table-panel" aria-label="下注桌">
+          <div id="table-root"></div>
+        </section>
+      </main>
+
+      <footer class="dock">
+        <div class="dock-main">
+          <div class="chip-row" id="chip-row" role="group" aria-label="筹码面额"></div>
+          <div class="side-actions">
+            <button type="button" class="btn-ghost" id="undo">撤销</button>
+            <button type="button" class="btn-ghost" id="clear">清空</button>
+          </div>
+          <button type="button" class="btn-spin" id="spin">开转</button>
+        </div>
+        <p class="status" id="status" role="status" aria-live="polite"></p>
+      </footer>
+    </div>
+
+    <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+
+    <dialog id="settings-dialog" aria-labelledby="settings-title">
+      <div class="dialog-head">
+        <h2 id="settings-title">设置</h2>
+        <button type="button" class="btn-ghost" data-close>关闭</button>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="sfx-toggle" />
+        <span>
+          <strong>音效</strong>
+          <small>落筹码、转轮和开奖的短提示音。默认关闭。</small>
+        </span>
+      </label>
+      <label class="switch">
+        <input type="checkbox" id="motion-toggle" />
+        <span>
+          <strong>跳过动画</strong>
+          <small>开转后直接停在结果上。适合减少动态。</small>
+        </span>
+      </label>
+      <div class="dialog-actions">
+        <button type="button" class="btn-ghost" id="open-rules">游戏规则</button>
+        <button type="button" class="btn-ghost" id="open-reset">重置余额</button>
+      </div>
+    </dialog>
+
+    <dialog id="rules-dialog" aria-labelledby="rules-title">
+      <div class="dialog-head">
+        <h2 id="rules-title">游戏规则</h2>
+        <button type="button" class="btn-ghost" data-close>关闭</button>
+      </div>
+      <div class="rules">
+        <h3>轮盘</h3>
+        <p>美式轮盘有 38 格：0、00，以及 1 到 36。0 与 00 是绿色。红色号码是 1、3、5、7、9、12、14、16、18、19、21、23、25、27、30、32、34、36，其余号码是黑色。</p>
+        <h3>赔率</h3>
+        <p>赔率写成「净赢」。中了以后，本金一并退回。</p>
+        <ul>
+          <li>直注（单个号码，含 0 与 00）：35:1。押 10 中了，净赢 350，一共收回 360。</li>
+          <li>红 / 黑、单 / 双、小（1–18）/ 大（19–36）：1:1。押 10 中了，一共收回 20。</li>
+          <li>打（1–12、13–24、25–36）和列：2:1。押 10 中了，一共收回 30。</li>
+        </ul>
+        <p>0 和 00 不算红黑、单双、大小，也不算任何一打或一列。这些注在开出 0 或 00 时都输掉。</p>
+        <h3>怎么玩</h3>
+        <ul>
+          <li>先选筹码，再点注区。同一格可以多次加注，筹码会叠起来。</li>
+          <li>撤销去掉最后一笔，清空收回这一局全部下注。</li>
+          <li>至少下一注才能开转。点下「开转」时结果已经决定，轮盘只是把它转出来。</li>
+          <li>余额不够时，底栏会闪一下红字，不会弹出窗口。</li>
+        </ul>
+        <h3>存在这台浏览器里</h3>
+        <p>起始筹码是 1,000。结算后会记住余额、最近十次开奖，以及音效和动画设置。没有账号，也不会上传。</p>
+        <p>还没开转就刷新，桌上的筹码会退回余额，注不会保留。已经点了开转再刷新，这一局按已经决定的结果结算。</p>
+      </div>
+    </dialog>
+
+    <dialog id="reset-dialog" aria-labelledby="reset-title">
+      <div class="dialog-head">
+        <h2 id="reset-title">重置余额</h2>
+      </div>
+      <p class="confirm-copy">余额会回到 1,000。桌上还没开转的筹码会清掉，最近开奖仍然保留。</p>
+      <div class="dialog-actions">
+        <button type="button" class="btn-ghost" id="reset-cancel">取消</button>
+        <button type="button" class="btn-danger" id="reset-confirm">重置为 1,000</button>
+      </div>
+    </dialog>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
