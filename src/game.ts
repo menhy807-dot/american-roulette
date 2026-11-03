@@ -11,7 +11,7 @@ import {
   type Placement,
   type Pocket,
 } from './rules.ts';
-import { STARTING_BALANCE, type Persisted, type Store } from './storage.ts';
+import { parsePersisted, STARTING_BALANCE, type Persisted, type Store } from './storage.ts';
 
 export type Phase = 'betting' | 'spinning' | 'settling';
 
@@ -49,6 +49,10 @@ export interface Game {
   resetBalance(): void;
   flash(text: string): void;
   persist(): void;
+  /** Settled snapshot. Chips still on the felt are counted back into the balance. */
+  toPersisted(): Persisted;
+  /** Replace the settled snapshot. Refuses while a round is spinning or settling. */
+  replacePersisted(data: Persisted): boolean;
 }
 
 export interface GameOptions {
@@ -279,5 +283,28 @@ export function createGame(options: GameOptions = {}): Game {
     },
     flash,
     persist: save,
+    toPersisted: projected,
+    replacePersisted(data) {
+      if (phase !== 'betting') {
+        flash('请等待本局结束');
+        return false;
+      }
+      const parsed = parsePersisted(data, data.reduceMotion);
+      if (!parsed) return false;
+      balance = parsed.balance;
+      lastSettledBalance = parsed.balance;
+      placements = [];
+      history = parsed.history.slice(0, 10);
+      result = history[0] ?? null;
+      sfx = parsed.sfx;
+      reduceMotion = parsed.reduceMotion;
+      pending = null;
+      roundCommitted = true;
+      roundNet = null;
+      roundReturn = 0;
+      save();
+      setStatus('已从存档码恢复');
+      return true;
+    },
   };
 }

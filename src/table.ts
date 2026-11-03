@@ -87,13 +87,9 @@ export function mountTable(root: HTMLElement, onPlace: (spot: SpotId, cell: HTML
   };
 
   const zero = makeButton('green zero', '0');
-  zero.style.gridColumn = '1';
-  zero.style.gridRow = '1 / 4';
   register('n:0', zero);
 
   const doubleZero = makeButton('green zero', '00');
-  doubleZero.style.gridColumn = '1';
-  doubleZero.style.gridRow = '4 / 7';
   register('n:00', doubleZero);
 
   numberGrid.append(zero, doubleZero);
@@ -103,54 +99,104 @@ export function mountTable(root: HTMLElement, onPlace: (spot: SpotId, cell: HTML
     const spot = `n:${pocket}` as SpotId;
     const color = colorOf(pocket);
     const el = makeButton(`num ${color}`, String(n));
-    const column = Math.floor((n - 1) / 3) + 2;
-    const mod = n % 3;
-    const rowStart = mod === 0 ? 1 : mod === 2 ? 3 : 5;
-    el.style.gridColumn = String(column);
-    el.style.gridRow = `${rowStart} / ${rowStart + 2}`;
     register(spot, el);
     numberGrid.appendChild(el);
   }
 
-  const columns: { spot: SpotId; label: string; row: string }[] = [
-    { spot: 'c3', label: '2:1\n第三列', row: '1 / 3' },
-    { spot: 'c2', label: '2:1\n第二列', row: '3 / 5' },
-    { spot: 'c1', label: '2:1\n第一列', row: '5 / 7' },
+  const columns: { spot: SpotId; label: string }[] = [
+    { spot: 'c3', label: '2:1\n第三列' },
+    { spot: 'c2', label: '2:1\n第二列' },
+    { spot: 'c1', label: '2:1\n第一列' },
   ];
   for (const column of columns) {
     const el = makeButton('outside column', column.label);
-    el.style.gridColumn = '14';
-    el.style.gridRow = column.row;
     register(column.spot, el);
     numberGrid.appendChild(el);
   }
 
-  const dozenSpots: { spot: SpotId; label: string; column: string }[] = [
-    { spot: 'd1', label: '第一打\n1–12', column: '2 / 6' },
-    { spot: 'd2', label: '第二打\n13–24', column: '6 / 10' },
-    { spot: 'd3', label: '第三打\n25–36', column: '10 / 14' },
+  const dozenSpots: { spot: SpotId; label: string }[] = [
+    { spot: 'd1', label: '第一打\n1–12' },
+    { spot: 'd2', label: '第二打\n13–24' },
+    { spot: 'd3', label: '第三打\n25–36' },
   ];
   for (const dozen of dozenSpots) {
     const el = makeButton('outside dozen', dozen.label);
-    el.style.gridColumn = dozen.column;
     register(dozen.spot, el);
     dozenGrid.appendChild(el);
   }
 
-  const outsideSpots: { spot: SpotId; label: string; column: string; extra?: string }[] = [
-    { spot: 'low', label: '小\n1–18', column: '2 / 4' },
-    { spot: 'even', label: '双', column: '4 / 6' },
-    { spot: 'red', label: '红', column: '6 / 8', extra: 'red-bet' },
-    { spot: 'black', label: '黑', column: '8 / 10', extra: 'black-bet' },
-    { spot: 'odd', label: '单', column: '10 / 12' },
-    { spot: 'high', label: '大\n19–36', column: '12 / 14' },
+  const outsideSpots: { spot: SpotId; label: string; extra?: string }[] = [
+    { spot: 'low', label: '小\n1–18' },
+    { spot: 'even', label: '双' },
+    { spot: 'red', label: '红', extra: 'red-bet' },
+    { spot: 'black', label: '黑', extra: 'black-bet' },
+    { spot: 'odd', label: '单' },
+    { spot: 'high', label: '大\n19–36' },
   ];
   for (const item of outsideSpots) {
     const el = makeButton(`outside even-money ${item.extra ?? ''}`, item.label);
-    el.style.gridColumn = item.column;
     register(item.spot, el);
     outsideGrid.appendChild(el);
   }
+
+  const place = (spot: SpotId, column: string, row: string) => {
+    const el = cells.get(spot);
+    if (!el) return;
+    el.style.gridColumn = column;
+    el.style.gridRow = row;
+  };
+
+  const layoutCells = (portrait: boolean) => {
+    board.dataset.layout = portrait ? 'portrait' : 'landscape';
+    if (!portrait) {
+      place('n:0', '1', '1 / 4');
+      place('n:00', '1', '4 / 7');
+      for (let n = 1; n <= 36; n += 1) {
+        const column = Math.floor((n - 1) / 3) + 2;
+        const mod = n % 3;
+        const rowStart = mod === 0 ? 1 : mod === 2 ? 3 : 5;
+        place(`n:${String(n)}` as SpotId, String(column), `${rowStart} / ${rowStart + 2}`);
+      }
+      place('c3', '14', '1 / 3');
+      place('c2', '14', '3 / 5');
+      place('c1', '14', '5 / 7');
+      place('d1', '2 / 6', '1');
+      place('d2', '6 / 10', '1');
+      place('d3', '10 / 14', '1');
+      place('low', '2 / 4', '1');
+      place('even', '4 / 6', '1');
+      place('red', '6 / 8', '1');
+      place('black', '8 / 10', '1');
+      place('odd', '10 / 12', '1');
+      place('high', '12 / 14', '1');
+      return;
+    }
+
+    place('n:0', '1 / 4', '1');
+    place('n:00', '4 / 7', '1');
+    for (let n = 1; n <= 36; n += 1) {
+      const street = Math.ceil(n / 3);
+      const pos = (n - 1) % 3;
+      place(`n:${String(n)}` as SpotId, `${pos * 2 + 1} / ${pos * 2 + 3}`, String(street + 1));
+    }
+    place('c1', '1 / 3', '14');
+    place('c2', '3 / 5', '14');
+    place('c3', '5 / 7', '14');
+    place('d1', '1 / 3', '1');
+    place('d2', '3 / 5', '1');
+    place('d3', '5 / 7', '1');
+    place('low', '1 / 3', '1');
+    place('even', '3 / 5', '1');
+    place('red', '5 / 7', '1');
+    place('black', '1 / 3', '2');
+    place('odd', '3 / 5', '2');
+    place('high', '5 / 7', '2');
+  };
+
+  const portraitQuery = window.matchMedia('(max-width: 720px)');
+  const applyLayout = () => layoutCells(portraitQuery.matches);
+  applyLayout();
+  portraitQuery.addEventListener('change', applyLayout);
 
   board.append(numberGrid, dozenGrid, outsideGrid);
   scroller.appendChild(board);

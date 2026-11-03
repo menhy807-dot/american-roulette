@@ -10,7 +10,7 @@ import { playChip, playLose, playSpin, playWin } from './audio.ts';
 import { paintChip } from './chips.ts';
 import { createGame, type Phase } from './game.ts';
 import { CHIP_VALUES, colorOf, formatChips, totalStake, type Chip, type Pocket } from './rules.ts';
-import { browserStore } from './storage.ts';
+import { browserStore, decodeSaveCode, encodeSaveCode, type SaveCodeError } from './storage.ts';
 import { mountTable } from './table.ts';
 import { CHIP_FLY_MS, settleHoldMs, spinDurationMs } from './timing.ts';
 import { mountWheel, renderHub } from './wheel.ts';
@@ -36,11 +36,23 @@ const motionToggle = document.querySelector<HTMLInputElement>('#motion-toggle');
 const settingsDialog = document.querySelector<HTMLDialogElement>('#settings-dialog');
 const rulesDialog = document.querySelector<HTMLDialogElement>('#rules-dialog');
 const resetDialog = document.querySelector<HTMLDialogElement>('#reset-dialog');
+const ageDialog = document.querySelector<HTMLDialogElement>('#age-dialog');
+const ageAccept = document.querySelector<HTMLButtonElement>('#age-accept');
+const exportSaveBtn = document.querySelector<HTMLButtonElement>('#export-save');
+const importSaveBtn = document.querySelector<HTMLButtonElement>('#import-save');
+const savePanel = document.querySelector<HTMLElement>('#save-panel');
+const saveLabel = document.querySelector<HTMLLabelElement>('#save-label');
+const saveText = document.querySelector<HTMLTextAreaElement>('#save-text');
+const saveFeedback = document.querySelector<HTMLElement>('#save-feedback');
+const copySaveBtn = document.querySelector<HTMLButtonElement>('#copy-save');
+const applySaveBtn = document.querySelector<HTMLButtonElement>('#apply-save');
 
 if (
   !balanceEl || !wagerEl || !statusEl || !historyEl || !spinBtn || !undoBtn || !clearBtn ||
   !chipRow || !wheelRoot || !tableRoot || !sfxToggle || !motionToggle ||
-  !settingsDialog || !rulesDialog || !resetDialog
+  !settingsDialog || !rulesDialog || !resetDialog || !ageDialog || !ageAccept ||
+  !exportSaveBtn || !importSaveBtn || !savePanel || !saveLabel || !saveText ||
+  !saveFeedback || !copySaveBtn || !applySaveBtn
 ) {
   throw new Error('页面结构不完整');
 }
@@ -55,6 +67,50 @@ const clearButton = clearBtn;
 const chipTray = chipRow;
 const sfxInput = sfxToggle;
 const motionInput = motionToggle;
+const savePanelEl = savePanel;
+const saveLabelEl = saveLabel;
+const saveTextEl = saveText;
+const saveFeedbackEl = saveFeedback;
+const copySaveButton = copySaveBtn;
+const applySaveButton = applySaveBtn;
+const ageModal = ageDialog;
+
+const NOTICE_KEY = 'american-roulette-notice-v1';
+const SAVE_ERRORS: Record<SaveCodeError, string> = {
+  empty: '请先粘贴存档码。Paste a save code first.',
+  version: '无法识别的存档码版本。Unrecognized save-code version.',
+  checksum: '存档码不完整或已被改动。This code is incomplete or was changed.',
+  malformed: '存档码无法读取。This code could not be read.',
+  invalid: '存档码内容无效。This code has invalid contents.',
+};
+
+function setSaveFeedback(text: string, kind: 'ok' | 'bad' | ''): void {
+  saveFeedbackEl.textContent = text;
+  saveFeedbackEl.classList.toggle('ok', kind === 'ok');
+  saveFeedbackEl.classList.toggle('bad', kind === 'bad');
+}
+
+function showSavePanel(mode: 'export' | 'import'): void {
+  savePanelEl.hidden = false;
+  if (mode === 'export') {
+    saveTextEl.readOnly = true;
+    saveTextEl.value = encodeSaveCode(game.toPersisted());
+    saveLabelEl.textContent = '存档码 · Save code';
+    copySaveButton.hidden = false;
+    applySaveButton.hidden = true;
+    setSaveFeedback('也可长按代码复制。Or long-press the code.', '');
+    return;
+  }
+  saveTextEl.readOnly = false;
+  saveTextEl.value = '';
+  saveLabelEl.textContent = '粘贴存档码 · Paste save code';
+  copySaveButton.hidden = true;
+  applySaveButton.hidden = false;
+  setSaveFeedback(
+    '导入会覆盖当前余额、开奖记录和设置。桌上未开转的筹码不会保留。Import replaces balance, history, and settings.',
+    '',
+  );
+}
 
 const wheel = mountWheel(wheelRoot);
 const table = mountTable(tableRoot, (spot, cell) => {
@@ -245,7 +301,7 @@ document.querySelector<HTMLButtonElement>('#reset-confirm')?.addEventListener('c
   game.resetBalance();
 });
 
-for (const dialog of [settingsDialog, rulesDialog, resetDialog]) {
+for (const dialog of [settingsDialog, rulesDialog, resetDialog, ageModal]) {
   dialog.addEventListener('click', (event) => {
     if (event.target === dialog) dialog.close();
   });
@@ -254,6 +310,76 @@ for (const dialog of [settingsDialog, rulesDialog, resetDialog]) {
   });
 }
 
+function noticeAccepted(): boolean {
+  try {
+    return localStorage.getItem(NOTICE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+ageModal.addEventListener('close', () => {
+  try {
+    localStorage.setItem(NOTICE_KEY, '1');
+  } catch {
+    // The footer line still states the disclaimer.
+  }
+});
+
+exportSaveBtn.addEventListener('click', () => showSavePanel('export'));
+importSaveBtn.addEventListener('click', () => {
+  showSavePanel('import');
+  saveTextEl.focus();
+});
+
+copySaveButton.addEventListener('click', async () => {
+  const code = saveTextEl.value;
+  let copied = false;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(code);
+      copied = true;
+    }
+  } catch {
+    copied = false;
+  }
+  if (!copied) {
+    saveTextEl.focus();
+    saveTextEl.select();
+    try {
+      copied = document.execCommand('copy');
+    } catch {
+      copied = false;
+    }
+  }
+  if (!copied) {
+    setSaveFeedback('无法自动复制，请长按上方代码手动复制。Could not copy automatically — select the code above.', 'bad');
+    return;
+  }
+  setSaveFeedback('已复制。Copied.', 'ok');
+});
+
+applySaveButton.addEventListener('click', () => {
+  const result = decodeSaveCode(saveTextEl.value);
+  if (!result.ok) {
+    setSaveFeedback(SAVE_ERRORS[result.error], 'bad');
+    return;
+  }
+  if (game.getState().phase !== 'betting') {
+    setSaveFeedback('请等待本局结束再导入。Wait until this round finishes.', 'bad');
+    game.flash('请等待本局结束');
+    return;
+  }
+  if (!game.replacePersisted(result.data)) {
+    setSaveFeedback('导入没有生效。Import did not apply.', 'bad');
+    return;
+  }
+  const state = game.getState();
+  wheel.jumpTo(state.result);
+  wheel.highlight(null);
+  setSaveFeedback('已导入。余额、最近开奖和设置已恢复。Imported balance, history, and settings.', 'ok');
+});
+
 window.addEventListener('pagehide', () => game.persist());
 window.addEventListener('beforeunload', () => game.persist());
 
@@ -261,3 +387,5 @@ const initial = game.getState();
 if (initial.result) wheel.jumpTo(initial.result);
 sync();
 game.subscribe(sync);
+
+if (!noticeAccepted()) ageModal.showModal();
