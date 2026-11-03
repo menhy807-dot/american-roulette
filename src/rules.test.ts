@@ -152,6 +152,33 @@ describe('spin landing', () => {
     const late = spinFrame(motion, 0.9);
     expect(late.ballTop).toBeGreaterThan(12);
   });
+
+  it('slows the wheel in one curve and does not jerk the ball', () => {
+    const steps = 500;
+    const wheels: number[] = [];
+    const balls: number[] = [];
+    for (let i = 0; i <= steps; i += 1) {
+      const frame = spinFrame(motion, i / steps);
+      wheels.push(frame.wheel);
+      balls.push(frame.ball);
+    }
+    const wheelStep: number[] = [];
+    const ballStep: number[] = [];
+    for (let i = 0; i < steps; i += 1) {
+      wheelStep.push(wheels[i + 1]! - wheels[i]!);
+      ballStep.push(balls[i + 1]! - balls[i]!);
+    }
+    for (let i = 0; i < wheelStep.length; i += 1) {
+      expect(wheelStep[i]).toBeGreaterThanOrEqual(-1e-6);
+    }
+    for (let i = 1; i < wheelStep.length; i += 1) {
+      expect(wheelStep[i]!).toBeLessThanOrEqual(wheelStep[i - 1]! + 1e-4);
+    }
+    const peak = Math.max(...ballStep.map((step) => Math.abs(step)));
+    for (let i = 1; i < ballStep.length; i += 1) {
+      expect(Math.abs(ballStep[i]! - ballStep[i - 1]!)).toBeLessThan(peak * 0.2);
+    }
+  });
 });
 
 describe('rng buckets', () => {

@@ -44,8 +44,12 @@ function smoothstep(edge0: number, edge1: number, value: number): number {
   return u * u * (3 - 2 * u);
 }
 
+/** How long the settled wheel stays large before it eases back. */
+export const ZOOM_HOLD_MS = 750;
+
 /**
  * Wheel angle, ball angle, and ball track (CSS top %) at progress t in [0, 1].
+ * One ease-out for the whole spin: speed falls the entire time and is zero only at the end.
  * t = 1 is exact: the chosen pocket is under the pointer and the ball is in it.
  */
 export function spinFrame(motion: SpinMotion, t: number): { wheel: number; ball: number; ballTop: number } {
@@ -54,27 +58,19 @@ export function spinFrame(motion: SpinMotion, t: number): { wheel: number; ball:
     return { wheel: motion.wheelEnd, ball: motion.ballEnd, ballTop: BALL_POCKET };
   }
 
-  const split = 0.8;
-  const wheelP = u < split
-    ? easeOutPow(u / split, motion.easePower) * 0.88
-    : 0.88 + easeOutPow((u - split) / (1 - split), 2) * 0.12;
-  let wheel = motion.wheelStart + (motion.wheelEnd - motion.wheelStart) * wheelP;
-  wheel += Math.sin(u * 16) * 0.28 * (1 - u);
+  const wheelP = easeOutPow(u, motion.easePower);
+  const wheel = motion.wheelStart + (motion.wheelEnd - motion.wheelStart) * wheelP;
 
-  const travelEnd = 0.72;
-  const ballP = u >= travelEnd ? 1 : 1 - Math.exp(-5.5 * (u / travelEnd));
-  const ballPNorm = ballP / (1 - Math.exp(-5.5));
-  let ball = motion.ballStart + (motion.ballEnd - motion.ballStart) * ballPNorm;
+  // Steeper than the wheel, so the ball is nearly in the pocket while the wheel still creeps.
+  const ballFree = motion.ballStart + (motion.ballEnd - motion.ballStart) * easeOutPow(u, motion.easePower + 1.5);
+  const ballLocked = motion.ballEnd + (wheel - motion.wheelEnd);
+  const lock = smoothstep(0.72, 0.96, u);
+  const bumpEnv = smoothstep(0.4, 0.58, u) * (1 - smoothstep(0.8, 0.95, u));
+  const bump = Math.sin(u * motion.bumps * Math.PI * 2) * motion.bumpAmp * bumpEnv;
+  const ball = ballFree * (1 - lock) + ballLocked * lock + bump;
 
-  const drop = smoothstep(0.55, 0.78, u);
-  let ballTop = BALL_OUTER + (BALL_POCKET - BALL_OUTER) * drop;
-
-  if (u > travelEnd && u < 0.97) {
-    const local = (u - travelEnd) / (0.97 - travelEnd);
-    const decay = Math.exp(-3.4 * local);
-    ball += Math.sin(local * motion.bumps * Math.PI) * motion.bumpAmp * decay;
-    ballTop += Math.sin(local * (motion.bumps + 1) * Math.PI) * motion.wobble * decay;
-  }
+  const drop = smoothstep(0.36, 0.9, u);
+  const ballTop = BALL_OUTER + (BALL_POCKET - BALL_OUTER) * drop + Math.sin(u * (motion.bumps + 1) * Math.PI * 2) * motion.wobble * bumpEnv;
 
   return { wheel, ball, ballTop };
 }
@@ -311,7 +307,11 @@ export function mountWheel(root: HTMLElement): WheelController {
         ballRot = ballEnd;
         applyFrame({ wheel: wheelRot, ball: ballRot, ballTop: BALL_POCKET });
         onDone();
-        if (spinning) setZoom(false);
+        if (spinning) {
+          window.setTimeout(() => {
+            if (my === token) setZoom(false);
+          }, ZOOM_HOLD_MS);
+        }
       };
 
       if (!spinning) {
