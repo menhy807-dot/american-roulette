@@ -1,4 +1,5 @@
 import { paintChip } from './chips.ts';
+import { cellLabel, onLocale, spotDetail, spotTitle, t } from './i18n.ts';
 import type { GameState } from './game.ts';
 import {
   colorOf,
@@ -16,21 +17,26 @@ export interface TableController {
   cell(spot: SpotId): HTMLButtonElement | undefined;
 }
 
-function makeButton(className: string, label: string): HTMLButtonElement {
-  const el = document.createElement('button');
-  el.type = 'button';
-  el.className = `cell ${className}`;
-  const face = document.createElement('span');
-  face.className = 'face-label';
+function setFace(face: HTMLElement, label: string): void {
+  face.replaceChildren();
   if (label.includes('\n')) {
     const [main, sub] = label.split('\n');
     face.append(document.createTextNode(main ?? ''));
     const small = document.createElement('small');
     small.textContent = sub ?? '';
     face.appendChild(small);
-  } else {
-    face.textContent = label;
+    return;
   }
+  face.textContent = label;
+}
+
+function makeButton(className: string, spot: string): HTMLButtonElement {
+  const el = document.createElement('button');
+  el.type = 'button';
+  el.className = `cell ${className}`;
+  const face = document.createElement('span');
+  face.className = 'face-label';
+  setFace(face, cellLabel(spot));
   const stack = document.createElement('span');
   stack.className = 'stack';
   el.append(face, stack);
@@ -101,10 +107,8 @@ export function mountTable(root: HTMLElement, onPlace: (spot: SpotId, cell: HTML
   head.className = 'felt-head';
   const title = document.createElement('p');
   title.className = 'felt-title';
-  title.textContent = '美式赌桌';
   const note = document.createElement('p');
   note.className = 'felt-note';
-  note.textContent = '直注 35:1 · 红黑单双大小 1:1 · 打与列 2:1';
   const banner = document.createElement('p');
   banner.className = 'lock-banner';
   banner.id = 'lock-banner';
@@ -140,10 +144,10 @@ export function mountTable(root: HTMLElement, onPlace: (spot: SpotId, cell: HTML
     cells.set(spot, el);
   };
 
-  const zero = makeButton('green zero', '0');
+  const zero = makeButton('green zero', 'n:0');
   register('n:0', zero);
 
-  const doubleZero = makeButton('green zero', '00');
+  const doubleZero = makeButton('green zero', 'n:00');
   register('n:00', doubleZero);
 
   numberGrid.append(zero, doubleZero);
@@ -152,43 +156,34 @@ export function mountTable(root: HTMLElement, onPlace: (spot: SpotId, cell: HTML
     const pocket = String(n) as Pocket;
     const spot = `n:${pocket}` as SpotId;
     const color = colorOf(pocket);
-    const el = makeButton(`num ${color}`, String(n));
+    const el = makeButton(`num ${color}`, spot);
     register(spot, el);
     numberGrid.appendChild(el);
   }
 
-  const columns: { spot: SpotId; label: string }[] = [
-    { spot: 'c3', label: '2:1\n第三列' },
-    { spot: 'c2', label: '2:1\n第二列' },
-    { spot: 'c1', label: '2:1\n第一列' },
-  ];
-  for (const column of columns) {
-    const el = makeButton('outside column', column.label);
-    register(column.spot, el);
+  const columns: SpotId[] = ['c3', 'c2', 'c1'];
+  for (const spot of columns) {
+    const el = makeButton('outside column', spot);
+    register(spot, el);
     numberGrid.appendChild(el);
   }
 
-  const dozenSpots: { spot: SpotId; label: string }[] = [
-    { spot: 'd1', label: '第一打\n1–12' },
-    { spot: 'd2', label: '第二打\n13–24' },
-    { spot: 'd3', label: '第三打\n25–36' },
-  ];
-  for (const dozen of dozenSpots) {
-    const el = makeButton('outside dozen', dozen.label);
-    register(dozen.spot, el);
+  for (const spot of ['d1', 'd2', 'd3'] as const) {
+    const el = makeButton('outside dozen', spot);
+    register(spot, el);
     dozenGrid.appendChild(el);
   }
 
-  const outsideSpots: { spot: SpotId; label: string; extra?: string }[] = [
-    { spot: 'low', label: '小\n1–18' },
-    { spot: 'even', label: '双' },
-    { spot: 'red', label: '红', extra: 'red-bet' },
-    { spot: 'black', label: '黑', extra: 'black-bet' },
-    { spot: 'odd', label: '单' },
-    { spot: 'high', label: '大\n19–36' },
+  const outsideSpots: { spot: SpotId; extra?: string }[] = [
+    { spot: 'low' },
+    { spot: 'even' },
+    { spot: 'red', extra: 'red-bet' },
+    { spot: 'black', extra: 'black-bet' },
+    { spot: 'odd' },
+    { spot: 'high' },
   ];
   for (const item of outsideSpots) {
-    const el = makeButton(`outside even-money ${item.extra ?? ''}`, item.label);
+    const el = makeButton(`outside even-money ${item.extra ?? ''}`, item.spot);
     register(item.spot, el);
     outsideGrid.appendChild(el);
   }
@@ -212,6 +207,17 @@ export function mountTable(root: HTMLElement, onPlace: (spot: SpotId, cell: HTML
   felt.append(head, scroller);
   root.appendChild(felt);
 
+  function relabel(): void {
+    title.textContent = t('feltTitle');
+    note.textContent = t('feltOdds');
+    for (const [spot, el] of cells) {
+      const face = el.querySelector<HTMLElement>('.face-label');
+      if (face) setFace(face, cellLabel(spot));
+    }
+  }
+  relabel();
+  onLocale(relabel);
+
   const tip = document.getElementById('tooltip');
   let tipSpot: SpotId | null = null;
 
@@ -227,14 +233,13 @@ export function mountTable(root: HTMLElement, onPlace: (spot: SpotId, cell: HTML
 
   function positionTip(anchor: HTMLElement): void {
     if (!tip || !tipSpot) return;
-    const copy = describeSpot(tipSpot);
     const stake = Number(anchor.dataset.stake ?? '0');
     tip.replaceChildren();
     const strong = document.createElement('strong');
-    strong.textContent = `${copy.title} · ${copy.detail}`;
+    strong.textContent = `${spotTitle(tipSpot)} · ${spotDetail(tipSpot)}`;
     const odds = document.createElement('span');
     odds.className = 'odds';
-    odds.textContent = `赔率 ${copy.odds}:1`;
+    odds.textContent = `${describeSpot(tipSpot).odds}:1`;
     tip.append(strong, odds);
     if (stake > 0) {
       const line = document.createElement('span');
@@ -261,7 +266,7 @@ export function mountTable(root: HTMLElement, onPlace: (spot: SpotId, cell: HTML
       const locked = state.phase !== 'betting';
       board.classList.toggle('locked', locked);
       banner.hidden = !locked;
-      banner.textContent = state.phase === 'settling' ? '结算中' : '本局已封盘';
+      banner.textContent = state.phase === 'settling' ? t('lockSettle') : t('lockSpin');
 
       const wins = state.phase === 'settling' && state.result ? new Set(winningSpots(state.result)) : null;
       for (const [spot, cell] of cells) {
@@ -273,11 +278,12 @@ export function mountTable(root: HTMLElement, onPlace: (spot: SpotId, cell: HTML
         const lastHit = state.phase !== 'spinning' && state.result !== null && spot === `n:${state.result}`;
         cell.classList.toggle('last-hit', lastHit);
         const copy = describeSpot(spot);
+        const name = spotTitle(spot);
         cell.setAttribute(
           'aria-label',
           stake > 0
-            ? `${copy.title}，${copy.odds} 比 1，已下 ${formatChips(stake)}`
-            : `${copy.title}，${copy.odds} 比 1`,
+            ? `${name}, ${copy.odds}:1, ${formatChips(stake)}`
+            : `${name}, ${copy.odds}:1`,
         );
 
         const mine = state.placements.filter((placement) => placement.spot === spot);

@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { createGame } from './game.ts';
+import { setLocale } from './i18n.ts';
 import { WHEEL_ORDER, type Pocket } from './rules.ts';
 import { decodeSaveCode, encodeSaveCode, parsePersisted, STARTING_BALANCE, type Persisted, type Store } from './storage.ts';
+
+beforeEach(() => setLocale('zh-CN'));
 
 function unitFor(pocket: Pocket): number {
   return (WHEEL_ORDER.indexOf(pocket) + 0.01) / 38;

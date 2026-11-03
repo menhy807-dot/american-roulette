@@ -37,19 +37,20 @@
       <header class="lobby-head">
         <span class="brand-mark" aria-hidden="true"></span>
         <div>
-          <p class="lobby-kicker">Free play · 免费游玩</p>
+          <p class="lobby-kicker" data-i18n="kicker">Free play</p>
           <h1 id="site-name">Harry Story Games</h1>
           <p id="site-tagline" class="lobby-tagline">Free browser games. No real money, no prizes. 18+.</p>
+        </div>
+        <div class="lang-menu">
+          <button type="button" class="lang-button" data-lang-button aria-haspopup="listbox" aria-expanded="false" data-i18n-aria="lang">English</button>
+          <ul class="lang-list" data-lang-list hidden role="listbox"></ul>
         </div>
       </header>
       <main class="lobby-main">
         <div id="game-list" class="game-grid"></div>
       </main>
       <footer class="lobby-foot">
-        <p class="legal" lang="en">
-          18+ entertainment only. No real money, no real-world prizes.
-          <span lang="zh-CN">仅供年满 18 岁娱乐，不涉及真钱，也没有现实奖励。</span>
-        </p>
+        <p class="legal" data-i18n="legal">18+ entertainment only. No real money, no real-world prizes.</p>
       </footer>
     </div>
     <script type="module" src="/src/lobby.ts"></script>

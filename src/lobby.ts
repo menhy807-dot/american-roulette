@@ -1,14 +1,9 @@
-import '@fontsource/noto-serif-sc/latin-600.css';
-import '@fontsource/noto-serif-sc/chinese-simplified-600.css';
-import '@fontsource/noto-sans-sc/latin-400.css';
-import '@fontsource/noto-sans-sc/latin-700.css';
-import '@fontsource/noto-sans-sc/chinese-simplified-400.css';
-import '@fontsource/noto-sans-sc/chinese-simplified-700.css';
 import './styles.css';
 
 import { GAMES, type CatalogGame } from './games.ts';
+import { applyDom, mountLanguageMenu, onLocale, t } from './i18n.ts';
 import { mountAgeNotice } from './notice.ts';
-import { SITE_NAME, SITE_TAGLINE } from './site.ts';
+import { SITE_NAME } from './site.ts';
 
 const nameEl = document.querySelector<HTMLElement>('#site-name');
 const taglineEl = document.querySelector<HTMLElement>('#site-tagline');
@@ -17,9 +12,12 @@ const listEl = document.querySelector<HTMLElement>('#game-list');
 if (!nameEl || !taglineEl || !listEl) {
   throw new Error('Lobby markup is incomplete');
 }
+const siteNameEl: HTMLElement = nameEl;
+const siteTagEl: HTMLElement = taglineEl;
+const gameListEl: HTMLElement = listEl;
 
-nameEl.textContent = SITE_NAME;
-taglineEl.textContent = SITE_TAGLINE;
+const langMenu = document.querySelector<HTMLElement>('.lang-menu');
+if (langMenu) mountLanguageMenu(langMenu);
 
 function soonCover(): SVGSVGElement {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -51,17 +49,13 @@ function cardBody(game: CatalogGame): HTMLElement {
   const body = document.createElement('div');
   body.className = 'game-body';
   const title = document.createElement('h2');
-  title.append(document.createTextNode(game.title));
-  const zh = document.createElement('span');
-  zh.lang = 'zh-CN';
-  zh.textContent = game.titleZh;
-  title.append(zh);
+  const mainName = document.createElement('span');
+  const localName = document.createElement('span');
   const copy = document.createElement('p');
-  copy.append(document.createTextNode(game.description));
-  const zhCopy = document.createElement('span');
-  zhCopy.lang = 'zh-CN';
-  zhCopy.textContent = game.descriptionZh;
-  copy.append(zhCopy);
+  mainName.dataset.card = game.id;
+  localName.dataset.cardLocal = game.id;
+  copy.dataset.cardDesc = game.id;
+  title.append(mainName, localName);
   body.append(title, copy);
   return body;
 }
@@ -85,7 +79,7 @@ function renderGame(game: CatalogGame): HTMLElement {
   if (game.status === 'soon') {
     const badge = document.createElement('span');
     badge.className = 'soon-badge';
-    badge.textContent = 'Coming soon · 即将推出';
+    badge.dataset.i18n = 'comingSoon';
     cover.appendChild(badge);
   }
 
@@ -97,7 +91,7 @@ function renderGame(game: CatalogGame): HTMLElement {
     link.href = game.href;
     const action = document.createElement('span');
     action.className = 'btn-play';
-    action.textContent = 'Play · 开始';
+    action.dataset.i18n = 'play';
     body.appendChild(action);
     link.append(cover, body);
     card.appendChild(link);
@@ -108,11 +102,52 @@ function renderGame(game: CatalogGame): HTMLElement {
   action.type = 'button';
   action.className = 'btn-play';
   action.disabled = true;
-  action.textContent = 'Coming soon · 即将推出';
+  action.dataset.i18n = 'comingSoon';
   body.appendChild(action);
   card.append(cover, body);
   return card;
 }
 
-listEl.replaceChildren(...GAMES.map(renderGame));
+function paintCards(): void {
+  const names: Record<string, 'cardRoulette' | 'cardBlackjack' | 'cardSlots'> = {
+    'american-roulette': 'cardRoulette',
+    blackjack: 'cardBlackjack',
+    slots: 'cardSlots',
+  };
+  const locals: Record<string, 'cardRouletteLocal' | 'cardBlackjackLocal' | 'cardSlotsLocal'> = {
+    'american-roulette': 'cardRouletteLocal',
+    blackjack: 'cardBlackjackLocal',
+    slots: 'cardSlotsLocal',
+  };
+  const descs: Record<string, 'cardRouletteDesc' | 'cardBlackjackDesc' | 'cardSlotsDesc'> = {
+    'american-roulette': 'cardRouletteDesc',
+    blackjack: 'cardBlackjackDesc',
+    slots: 'cardSlotsDesc',
+  };
+  for (const card of gameListEl.querySelectorAll<HTMLElement>('[data-card]')) {
+    const id = card.dataset.card ?? '';
+    const key = names[id];
+    if (key) card.textContent = t(key);
+  }
+  for (const card of gameListEl.querySelectorAll<HTMLElement>('[data-card-local]')) {
+    const key = locals[card.dataset.cardLocal ?? ''];
+    if (key) card.textContent = t(key);
+  }
+  for (const card of gameListEl.querySelectorAll<HTMLElement>('[data-card-desc]')) {
+    const key = descs[card.dataset.cardDesc ?? ''];
+    if (key) card.textContent = t(key);
+  }
+}
+
+function paintLobby(): void {
+  siteNameEl.textContent = SITE_NAME;
+  siteTagEl.textContent = t('tagline');
+  document.title = t('docTitle');
+  applyDom(document);
+  paintCards();
+}
+
+gameListEl.replaceChildren(...GAMES.map(renderGame));
+paintLobby();
+onLocale(paintLobby);
 mountAgeNotice();

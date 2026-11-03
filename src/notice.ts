@@ -17,11 +17,17 @@ function remember(): void {
   }
 }
 
-function paragraph(lang: string, text: string): HTMLParagraphElement {
-  const el = document.createElement('p');
-  el.lang = lang;
-  el.textContent = text;
-  return el;
+import { onLocale, t } from './i18n.ts';
+
+function fill(dialog: HTMLElement): void {
+  const kicker = dialog.querySelector('.age-kicker');
+  const title = dialog.querySelector('#age-title');
+  const body = dialog.querySelector('.age-body');
+  const accept = dialog.querySelector('.btn-age');
+  if (kicker) kicker.textContent = t('ageKicker');
+  if (title) title.textContent = t('ageTitle');
+  if (body) body.textContent = t('ageBody');
+  if (accept) accept.textContent = t('ageAccept');
 }
 
 /** First visit on the lobby or a game, whichever opens first. */
@@ -35,29 +41,16 @@ export function mountAgeNotice(): void {
 
   const kicker = document.createElement('p');
   kicker.className = 'age-kicker';
-  kicker.lang = 'en';
-  kicker.textContent = '18+ · Entertainment only';
-
   const title = document.createElement('h2');
   title.id = 'age-title';
-  title.lang = 'en';
-  title.textContent = 'Free to play. No real money.';
-
+  const body = document.createElement('p');
+  body.className = 'age-body';
   const accept = document.createElement('button');
   accept.type = 'button';
   accept.className = 'btn-age';
-  accept.textContent = 'I am 18 or older · 我已年满 18 岁';
-
-  dialog.append(
-    kicker,
-    title,
-    paragraph(
-      'en',
-      'Harry Story Games are free browser games for adults. Nothing here is real money, and there are no real-world prizes. You must be 18 or older to play.',
-    ),
-    paragraph('zh-CN', '这里的游戏免费、只供成年人娱乐。不涉及真钱，也没有现实世界的奖励。未满 18 岁请勿游玩。'),
-    accept,
-  );
+  dialog.append(kicker, title, body, accept);
+  fill(dialog);
+  onLocale(() => fill(dialog));
   document.body.appendChild(dialog);
 
   accept.addEventListener('click', () => dialog.close());

@@ -14,6 +14,7 @@ import {
   type SpotId,
 } from './rules.ts';
 import { spinDurationMs } from './timing.ts';
+import { spinFrame, type SpinMotion } from './wheel.ts';
 
 const OUTSIDE: OutsideSpot[] = [
   'red', 'black', 'odd', 'even', 'low', 'high', 'd1', 'd2', 'd3', 'c1', 'c2', 'c3',
@@ -114,12 +115,42 @@ describe('payouts', () => {
 });
 
 describe('spin timing', () => {
-  it('stays inside 3.5 to 5 seconds unless motion is skipped', () => {
+  it('stays inside 5.5 to 8 seconds unless motion is skipped', () => {
     expect(spinDurationMs(true, 0.2)).toBe(0);
-    expect(spinDurationMs(false, 0)).toBe(3500);
-    expect(spinDurationMs(false, 1)).toBe(5000);
-    expect(spinDurationMs(false, 0.5)).toBeGreaterThanOrEqual(3500);
-    expect(spinDurationMs(false, 0.5)).toBeLessThanOrEqual(5000);
+    expect(spinDurationMs(false, 0)).toBe(5500);
+    expect(spinDurationMs(false, 1)).toBe(8000);
+    expect(spinDurationMs(false, 0.5)).toBeGreaterThanOrEqual(5500);
+    expect(spinDurationMs(false, 0.5)).toBeLessThanOrEqual(8000);
+  });
+});
+
+describe('spin landing', () => {
+  const motion: SpinMotion = {
+    wheelStart: 20,
+    wheelEnd: rotationToTop(20, '17', 6),
+    ballStart: 15,
+    ballEnd: 15 - 15 - 8 * 360,
+    easePower: 3,
+    bumps: 4,
+    bumpAmp: 16,
+    wobble: 1,
+  };
+
+  it('stops on the pocket chosen before the animation', () => {
+    const end = spinFrame(motion, 1);
+    expect(end.wheel).toBeCloseTo(motion.wheelEnd, 5);
+    expect(((end.ball % 360) + 360) % 360).toBeCloseTo(0, 4);
+    expect(end.ballTop).toBeCloseTo(14.5, 4);
+    expect(WHEEL_ORDER.includes('17')).toBe(true);
+  });
+
+  it('sends the ball the other way and keeps it outside until it drops', () => {
+    const early = spinFrame(motion, 0.25);
+    expect(early.wheel).toBeGreaterThan(motion.wheelStart);
+    expect(early.ball).toBeLessThan(motion.ballStart);
+    expect(early.ballTop).toBeLessThan(10);
+    const late = spinFrame(motion, 0.9);
+    expect(late.ballTop).toBeGreaterThan(12);
   });
 });
 

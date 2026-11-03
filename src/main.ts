@@ -1,15 +1,11 @@
-import '@fontsource/noto-serif-sc/latin-600.css';
-import '@fontsource/noto-serif-sc/chinese-simplified-600.css';
-import '@fontsource/noto-sans-sc/latin-400.css';
-import '@fontsource/noto-sans-sc/latin-700.css';
-import '@fontsource/noto-sans-sc/chinese-simplified-400.css';
-import '@fontsource/noto-sans-sc/chinese-simplified-700.css';
 import './styles.css';
 
-import { playChip, playLose, playSpin, playWin } from './audio.ts';
+import { playChip, playLose, playWin, startRoll, unlockAudio } from './audio.ts';
+import { celebrate, isBigWin, showWinBanner } from './celebrate.ts';
 import { paintChip } from './chips.ts';
 import { createGame, type Phase } from './game.ts';
-import { CHIP_VALUES, colorOf, formatChips, totalStake, type Chip, type Pocket } from './rules.ts';
+import { applyDom, mountLanguageMenu, onLocale, t, type MessageKey } from './i18n.ts';
+import { CHIP_VALUES, colorOf, formatChips, isWinningSpot, totalStake, type Chip, type Pocket } from './rules.ts';
 import { browserStore, decodeSaveCode, encodeSaveCode, type SaveCodeError } from './storage.ts';
 import { mountAgeNotice } from './notice.ts';
 import { mountTable } from './table.ts';
@@ -73,13 +69,15 @@ const saveFeedbackEl = saveFeedback;
 const copySaveButton = copySaveBtn;
 const applySaveButton = applySaveBtn;
 
-const SAVE_ERRORS: Record<SaveCodeError, string> = {
-  empty: '请先粘贴存档码。Paste a save code first.',
-  version: '无法识别的存档码版本。Unrecognized save-code version.',
-  checksum: '存档码不完整或已被改动。This code is incomplete or was changed.',
-  malformed: '存档码无法读取。This code could not be read.',
-  invalid: '存档码内容无效。This code has invalid contents.',
+const SAVE_ERRORS: Record<SaveCodeError, MessageKey> = {
+  empty: 'errEmpty',
+  version: 'errVersion',
+  checksum: 'errChecksum',
+  malformed: 'errMalformed',
+  invalid: 'errInvalid',
 };
+
+let stopRoll = () => {};
 
 function setSaveFeedback(text: string, kind: 'ok' | 'bad' | ''): void {
   saveFeedbackEl.textContent = text;
@@ -92,19 +90,19 @@ function showSavePanel(mode: 'export' | 'import'): void {
   if (mode === 'export') {
     saveTextEl.readOnly = true;
     saveTextEl.value = encodeSaveCode(game.toPersisted());
-    saveLabelEl.textContent = '存档码 · Save code';
+    saveLabelEl.textContent = t('saveTitle');
     copySaveButton.hidden = false;
     applySaveButton.hidden = true;
-    setSaveFeedback('也可长按代码复制。Or long-press the code.', '');
+    setSaveFeedback(t('saveHintExport'), '');
     return;
   }
   saveTextEl.readOnly = false;
   saveTextEl.value = '';
-  saveLabelEl.textContent = '粘贴存档码 · Paste save code';
+  saveLabelEl.textContent = t('saveTitle');
   copySaveButton.hidden = true;
   applySaveButton.hidden = false;
   setSaveFeedback(
-    '导入会覆盖当前余额、开奖记录和设置。桌上未开转的筹码不会保留。Import replaces balance, history, and settings.',
+    t('saveHintImport'),
     '',
   );
 }
@@ -128,7 +126,8 @@ for (const amount of CHIP_VALUES) {
   btn.type = 'button';
   btn.className = 'chip-face tray-chip';
   btn.dataset.chip = String(amount);
-  btn.setAttribute('aria-label', `面额 ${amount}`);
+  btn.dataset.chipLabel = String(amount);
+  btn.setAttribute('aria-label', t('chip', { n: amount }));
   paintChip(btn, amount);
   btn.addEventListener('click', () => game.selectChip(amount));
   chipRow.appendChild(btn);
@@ -167,7 +166,7 @@ function renderHistory(history: readonly Pocket[]): void {
   if (history.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'history-empty';
-    empty.textContent = '还没有开奖';
+    empty.textContent = t('historyEmpty');
     historyNode.appendChild(empty);
     return;
   }
@@ -226,7 +225,9 @@ function sync(): void {
   undoButton.disabled = !editing || state.placements.length === 0;
   clearButton.disabled = !editing || state.placements.length === 0;
   spinButton.disabled = !editing;
-  spinButton.textContent = state.phase === 'spinning' ? '转动中' : state.phase === 'settling' ? '结算中' : '开转';
+  const spinKey = state.phase === 'spinning' ? 'spinning' : state.phase === 'settling' ? 'settling' : 'spin';
+  spinButton.textContent = t(spinKey);
+  spinButton.dataset.i18n = spinKey;
 
   table.render(state);
   renderHistory(state.history);
@@ -236,15 +237,26 @@ function sync(): void {
 
   if (enteredSpin) wheel.highlight(null);
   if (enteredSpin && state.pending) {
-    if (state.sfx) playSpin();
+    stopRoll();
+    if (state.sfx) stopRoll = startRoll();
     const duration = spinDurationMs(state.reduceMotion, Math.random());
     wheel.spinTo(state.pending, duration, () => game.finishSpin());
   }
   if (enteredSettle) {
+    stopRoll();
+    stopRoll = () => {};
     if (state.result) wheel.highlight(state.result);
-    if (state.sfx) {
-      if ((state.roundNet ?? 0) > 0) playWin();
-      else playLose();
+    const net = state.roundNet ?? 0;
+    const straight = state.result !== null && state.placements.some(
+      (placement) => placement.spot.startsWith('n:') && isWinningSpot(placement.spot, state.result as Pocket),
+    );
+    if (net > 0) {
+      const big = isBigWin(net, totalStake(state.placements), straight);
+      showWinBanner(t(big ? 'bigWin' : 'youWin', { amount: formatChips(net) }));
+      celebrate(big, state.reduceMotion);
+      if (state.sfx) playWin(big);
+    } else if (state.sfx) {
+      playLose();
     }
     window.clearTimeout(settleTimer);
     settleTimer = window.setTimeout(() => game.completeRound(), settleHoldMs(state.reduceMotion));
@@ -282,7 +294,7 @@ document.querySelector<HTMLButtonElement>('#open-rules')?.addEventListener('clic
 document.querySelector<HTMLButtonElement>('#open-reset')?.addEventListener('click', () => {
   if (game.getState().phase !== 'betting') {
     settingsDialog.close();
-    game.flash('请等待本局结束');
+    game.flash({ k: 'wait' });
     return;
   }
   settingsDialog.close();
@@ -334,31 +346,31 @@ copySaveButton.addEventListener('click', async () => {
     }
   }
   if (!copied) {
-    setSaveFeedback('无法自动复制，请长按上方代码手动复制。Could not copy automatically — select the code above.', 'bad');
+    setSaveFeedback(t('copyFail'), 'bad');
     return;
   }
-  setSaveFeedback('已复制。Copied.', 'ok');
+  setSaveFeedback(t('copied'), 'ok');
 });
 
 applySaveButton.addEventListener('click', () => {
   const result = decodeSaveCode(saveTextEl.value);
   if (!result.ok) {
-    setSaveFeedback(SAVE_ERRORS[result.error], 'bad');
+    setSaveFeedback(t(SAVE_ERRORS[result.error]), 'bad');
     return;
   }
   if (game.getState().phase !== 'betting') {
-    setSaveFeedback('请等待本局结束再导入。Wait until this round finishes.', 'bad');
-    game.flash('请等待本局结束');
+    setSaveFeedback(t('importWait'), 'bad');
+    game.flash({ k: 'wait' });
     return;
   }
   if (!game.replacePersisted(result.data)) {
-    setSaveFeedback('导入没有生效。Import did not apply.', 'bad');
+    setSaveFeedback(t('importFail'), 'bad');
     return;
   }
   const state = game.getState();
   wheel.jumpTo(state.result);
   wheel.highlight(null);
-  setSaveFeedback('已导入。余额、最近开奖和设置已恢复。Imported balance, history, and settings.', 'ok');
+  setSaveFeedback(t('imported'), 'ok');
 });
 
 window.addEventListener('pagehide', () => game.persist());
@@ -366,6 +378,33 @@ window.addEventListener('beforeunload', () => game.persist());
 
 const initial = game.getState();
 if (initial.result) wheel.jumpTo(initial.result);
+function fillRules(): void {
+  const rules = document.querySelector('#rules-body');
+  if (!rules) return;
+  rules.replaceChildren();
+  for (const key of ['rulesIntro', 'rulesWheel', 'rulesPay', 'rulesPlay', 'rulesSave'] as const) {
+    const p = document.createElement('p');
+    p.textContent = t(key);
+    rules.appendChild(p);
+  }
+}
+
+function refreshCopy(): void {
+  applyDom(document);
+  document.title = t('docTitleGame');
+  for (const btn of chipTray.querySelectorAll<HTMLButtonElement>('.tray-chip')) {
+    btn.setAttribute('aria-label', t('chip', { n: btn.dataset.chipLabel ?? '' }));
+  }
+  fillRules();
+  sync();
+}
+
+const langMenu = document.querySelector<HTMLElement>('#settings-dialog .lang-menu');
+if (langMenu) mountLanguageMenu(langMenu);
+
+document.addEventListener('pointerdown', () => unlockAudio(), { once: true });
+refreshCopy();
+onLocale(refreshCopy);
 sync();
 game.subscribe(sync);
 mountAgeNotice();
