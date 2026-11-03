@@ -11,6 +11,7 @@ import { paintChip } from './chips.ts';
 import { createGame, type Phase } from './game.ts';
 import { CHIP_VALUES, colorOf, formatChips, totalStake, type Chip, type Pocket } from './rules.ts';
 import { browserStore, decodeSaveCode, encodeSaveCode, type SaveCodeError } from './storage.ts';
+import { mountAgeNotice } from './notice.ts';
 import { mountTable } from './table.ts';
 import { CHIP_FLY_MS, settleHoldMs, spinDurationMs } from './timing.ts';
 import { mountWheel, renderHub } from './wheel.ts';
@@ -36,8 +37,6 @@ const motionToggle = document.querySelector<HTMLInputElement>('#motion-toggle');
 const settingsDialog = document.querySelector<HTMLDialogElement>('#settings-dialog');
 const rulesDialog = document.querySelector<HTMLDialogElement>('#rules-dialog');
 const resetDialog = document.querySelector<HTMLDialogElement>('#reset-dialog');
-const ageDialog = document.querySelector<HTMLDialogElement>('#age-dialog');
-const ageAccept = document.querySelector<HTMLButtonElement>('#age-accept');
 const exportSaveBtn = document.querySelector<HTMLButtonElement>('#export-save');
 const importSaveBtn = document.querySelector<HTMLButtonElement>('#import-save');
 const savePanel = document.querySelector<HTMLElement>('#save-panel');
@@ -50,7 +49,7 @@ const applySaveBtn = document.querySelector<HTMLButtonElement>('#apply-save');
 if (
   !balanceEl || !wagerEl || !statusEl || !historyEl || !spinBtn || !undoBtn || !clearBtn ||
   !chipRow || !wheelRoot || !tableRoot || !sfxToggle || !motionToggle ||
-  !settingsDialog || !rulesDialog || !resetDialog || !ageDialog || !ageAccept ||
+  !settingsDialog || !rulesDialog || !resetDialog ||
   !exportSaveBtn || !importSaveBtn || !savePanel || !saveLabel || !saveText ||
   !saveFeedback || !copySaveBtn || !applySaveBtn
 ) {
@@ -73,9 +72,7 @@ const saveTextEl = saveText;
 const saveFeedbackEl = saveFeedback;
 const copySaveButton = copySaveBtn;
 const applySaveButton = applySaveBtn;
-const ageModal = ageDialog;
 
-const NOTICE_KEY = 'american-roulette-notice-v1';
 const SAVE_ERRORS: Record<SaveCodeError, string> = {
   empty: '请先粘贴存档码。Paste a save code first.',
   version: '无法识别的存档码版本。Unrecognized save-code version.',
@@ -301,7 +298,7 @@ document.querySelector<HTMLButtonElement>('#reset-confirm')?.addEventListener('c
   game.resetBalance();
 });
 
-for (const dialog of [settingsDialog, rulesDialog, resetDialog, ageModal]) {
+for (const dialog of [settingsDialog, rulesDialog, resetDialog]) {
   dialog.addEventListener('click', (event) => {
     if (event.target === dialog) dialog.close();
   });
@@ -309,22 +306,6 @@ for (const dialog of [settingsDialog, rulesDialog, resetDialog, ageModal]) {
     btn.addEventListener('click', () => dialog.close());
   });
 }
-
-function noticeAccepted(): boolean {
-  try {
-    return localStorage.getItem(NOTICE_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-ageModal.addEventListener('close', () => {
-  try {
-    localStorage.setItem(NOTICE_KEY, '1');
-  } catch {
-    // The footer line still states the disclaimer.
-  }
-});
 
 exportSaveBtn.addEventListener('click', () => showSavePanel('export'));
 importSaveBtn.addEventListener('click', () => {
@@ -387,5 +368,4 @@ const initial = game.getState();
 if (initial.result) wheel.jumpTo(initial.result);
 sync();
 game.subscribe(sync);
-
-if (!noticeAccepted()) ageModal.showModal();
+mountAgeNotice();

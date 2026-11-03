@@ -37,6 +37,60 @@ function makeButton(className: string, label: string): HTMLButtonElement {
   return el;
 }
 
+/** Grid placement for one spot. Portrait uses six numbers per row so the felt fits a phone. */
+export function tablePlacement(spot: SpotId, portrait: boolean): { column: string; row: string } {
+  if (!portrait) {
+    if (spot === 'n:0') return { column: '1', row: '1 / 4' };
+    if (spot === 'n:00') return { column: '1', row: '4 / 7' };
+    if (spot.startsWith('n:')) {
+      const n = Number(spot.slice(2));
+      const column = Math.floor((n - 1) / 3) + 2;
+      const mod = n % 3;
+      const rowStart = mod === 0 ? 1 : mod === 2 ? 3 : 5;
+      return { column: String(column), row: `${rowStart} / ${rowStart + 2}` };
+    }
+    const columns: Record<string, { column: string; row: string }> = {
+      c3: { column: '14', row: '1 / 3' },
+      c2: { column: '14', row: '3 / 5' },
+      c1: { column: '14', row: '5 / 7' },
+      d1: { column: '2 / 6', row: '1' },
+      d2: { column: '6 / 10', row: '1' },
+      d3: { column: '10 / 14', row: '1' },
+      low: { column: '2 / 4', row: '1' },
+      even: { column: '4 / 6', row: '1' },
+      red: { column: '6 / 8', row: '1' },
+      black: { column: '8 / 10', row: '1' },
+      odd: { column: '10 / 12', row: '1' },
+      high: { column: '12 / 14', row: '1' },
+    };
+    return columns[spot] ?? { column: '1', row: '1' };
+  }
+
+  if (spot === 'n:0') return { column: '1 / 4', row: '1' };
+  if (spot === 'n:00') return { column: '4 / 7', row: '1' };
+  if (spot.startsWith('n:')) {
+    const n = Number(spot.slice(2));
+    const line = Math.ceil(n / 6);
+    const col = ((n - 1) % 6) + 1;
+    return { column: String(col), row: String(line + 1) };
+  }
+  const portraitColumns: Record<string, { column: string; row: string }> = {
+    c1: { column: '1 / 3', row: '8' },
+    c2: { column: '3 / 5', row: '8' },
+    c3: { column: '5 / 7', row: '8' },
+    d1: { column: '1 / 3', row: '1' },
+    d2: { column: '3 / 5', row: '1' },
+    d3: { column: '5 / 7', row: '1' },
+    low: { column: '1', row: '1' },
+    even: { column: '2', row: '1' },
+    red: { column: '3', row: '1' },
+    black: { column: '4', row: '1' },
+    odd: { column: '5', row: '1' },
+    high: { column: '6', row: '1' },
+  };
+  return portraitColumns[spot] ?? { column: '1', row: '1' };
+}
+
 export function mountTable(root: HTMLElement, onPlace: (spot: SpotId, cell: HTMLButtonElement) => void): TableController {
   root.replaceChildren();
 
@@ -139,58 +193,13 @@ export function mountTable(root: HTMLElement, onPlace: (spot: SpotId, cell: HTML
     outsideGrid.appendChild(el);
   }
 
-  const place = (spot: SpotId, column: string, row: string) => {
-    const el = cells.get(spot);
-    if (!el) return;
-    el.style.gridColumn = column;
-    el.style.gridRow = row;
-  };
-
   const layoutCells = (portrait: boolean) => {
     board.dataset.layout = portrait ? 'portrait' : 'landscape';
-    if (!portrait) {
-      place('n:0', '1', '1 / 4');
-      place('n:00', '1', '4 / 7');
-      for (let n = 1; n <= 36; n += 1) {
-        const column = Math.floor((n - 1) / 3) + 2;
-        const mod = n % 3;
-        const rowStart = mod === 0 ? 1 : mod === 2 ? 3 : 5;
-        place(`n:${String(n)}` as SpotId, String(column), `${rowStart} / ${rowStart + 2}`);
-      }
-      place('c3', '14', '1 / 3');
-      place('c2', '14', '3 / 5');
-      place('c1', '14', '5 / 7');
-      place('d1', '2 / 6', '1');
-      place('d2', '6 / 10', '1');
-      place('d3', '10 / 14', '1');
-      place('low', '2 / 4', '1');
-      place('even', '4 / 6', '1');
-      place('red', '6 / 8', '1');
-      place('black', '8 / 10', '1');
-      place('odd', '10 / 12', '1');
-      place('high', '12 / 14', '1');
-      return;
+    for (const [spot, el] of cells) {
+      const next = tablePlacement(spot, portrait);
+      el.style.gridColumn = next.column;
+      el.style.gridRow = next.row;
     }
-
-    place('n:0', '1 / 4', '1');
-    place('n:00', '4 / 7', '1');
-    for (let n = 1; n <= 36; n += 1) {
-      const street = Math.ceil(n / 3);
-      const pos = (n - 1) % 3;
-      place(`n:${String(n)}` as SpotId, `${pos * 2 + 1} / ${pos * 2 + 3}`, String(street + 1));
-    }
-    place('c1', '1 / 3', '14');
-    place('c2', '3 / 5', '14');
-    place('c3', '5 / 7', '14');
-    place('d1', '1 / 3', '1');
-    place('d2', '3 / 5', '1');
-    place('d3', '5 / 7', '1');
-    place('low', '1 / 3', '1');
-    place('even', '3 / 5', '1');
-    place('red', '5 / 7', '1');
-    place('black', '1 / 3', '2');
-    place('odd', '3 / 5', '2');
-    place('high', '5 / 7', '2');
   };
 
   const portraitQuery = window.matchMedia('(max-width: 720px)');
