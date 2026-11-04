@@ -1,6 +1,14 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      input: {
+        main: 'index.html',
+        roulette: 'roulette/index.html',
+      },
+    },
+  },
   server: {
     host: '0.0.0.0',
     port: 4317,

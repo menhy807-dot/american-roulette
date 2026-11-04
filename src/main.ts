@@ -1,16 +1,14 @@
-import '@fontsource/noto-serif-sc/latin-600.css';
-import '@fontsource/noto-serif-sc/chinese-simplified-600.css';
-import '@fontsource/noto-sans-sc/latin-400.css';
-import '@fontsource/noto-sans-sc/latin-700.css';
-import '@fontsource/noto-sans-sc/chinese-simplified-400.css';
-import '@fontsource/noto-sans-sc/chinese-simplified-700.css';
 import './styles.css';
 
-import { playChip, playLose, playSpin, playWin } from './audio.ts';
+import { playChip, playLose, playWin, startRoll, unlockAudio } from './audio.ts';
+import { celebrate, isBigWin, showWinBanner } from './celebrate.ts';
 import { paintChip } from './chips.ts';
 import { createGame, type Phase } from './game.ts';
-import { CHIP_VALUES, colorOf, formatChips, totalStake, type Chip, type Pocket } from './rules.ts';
-import { browserStore } from './storage.ts';
+import { applyDom, mountLanguageMenu, onLocale, t, type MessageKey } from './i18n.ts';
+import { currentStreaks, type StreakKind } from './streaks.ts';
+import { CHIP_VALUES, colorOf, formatChips, isWinningSpot, totalStake, type Chip, type Pocket } from './rules.ts';
+import { browserStore, decodeSaveCode, encodeSaveCode, type SaveCodeError } from './storage.ts';
+import { mountAgeNotice } from './notice.ts';
 import { mountTable } from './table.ts';
 import { CHIP_FLY_MS, settleHoldMs, spinDurationMs } from './timing.ts';
 import { mountWheel, renderHub } from './wheel.ts';
@@ -36,11 +34,21 @@ const motionToggle = document.querySelector<HTMLInputElement>('#motion-toggle');
 const settingsDialog = document.querySelector<HTMLDialogElement>('#settings-dialog');
 const rulesDialog = document.querySelector<HTMLDialogElement>('#rules-dialog');
 const resetDialog = document.querySelector<HTMLDialogElement>('#reset-dialog');
+const exportSaveBtn = document.querySelector<HTMLButtonElement>('#export-save');
+const importSaveBtn = document.querySelector<HTMLButtonElement>('#import-save');
+const savePanel = document.querySelector<HTMLElement>('#save-panel');
+const saveLabel = document.querySelector<HTMLLabelElement>('#save-label');
+const saveText = document.querySelector<HTMLTextAreaElement>('#save-text');
+const saveFeedback = document.querySelector<HTMLElement>('#save-feedback');
+const copySaveBtn = document.querySelector<HTMLButtonElement>('#copy-save');
+const applySaveBtn = document.querySelector<HTMLButtonElement>('#apply-save');
 
 if (
   !balanceEl || !wagerEl || !statusEl || !historyEl || !spinBtn || !undoBtn || !clearBtn ||
   !chipRow || !wheelRoot || !tableRoot || !sfxToggle || !motionToggle ||
-  !settingsDialog || !rulesDialog || !resetDialog
+  !settingsDialog || !rulesDialog || !resetDialog ||
+  !exportSaveBtn || !importSaveBtn || !savePanel || !saveLabel || !saveText ||
+  !saveFeedback || !copySaveBtn || !applySaveBtn
 ) {
   throw new Error('页面结构不完整');
 }
@@ -55,6 +63,50 @@ const clearButton = clearBtn;
 const chipTray = chipRow;
 const sfxInput = sfxToggle;
 const motionInput = motionToggle;
+const savePanelEl = savePanel;
+const saveLabelEl = saveLabel;
+const saveTextEl = saveText;
+const saveFeedbackEl = saveFeedback;
+const copySaveButton = copySaveBtn;
+const applySaveButton = applySaveBtn;
+
+const SAVE_ERRORS: Record<SaveCodeError, MessageKey> = {
+  empty: 'errEmpty',
+  version: 'errVersion',
+  checksum: 'errChecksum',
+  malformed: 'errMalformed',
+  invalid: 'errInvalid',
+};
+
+let stopRoll = () => {};
+
+function setSaveFeedback(text: string, kind: 'ok' | 'bad' | ''): void {
+  saveFeedbackEl.textContent = text;
+  saveFeedbackEl.classList.toggle('ok', kind === 'ok');
+  saveFeedbackEl.classList.toggle('bad', kind === 'bad');
+}
+
+function showSavePanel(mode: 'export' | 'import'): void {
+  savePanelEl.hidden = false;
+  if (mode === 'export') {
+    saveTextEl.readOnly = true;
+    saveTextEl.value = encodeSaveCode(game.toPersisted());
+    saveLabelEl.textContent = t('saveTitle');
+    copySaveButton.hidden = false;
+    applySaveButton.hidden = true;
+    setSaveFeedback(t('saveHintExport'), '');
+    return;
+  }
+  saveTextEl.readOnly = false;
+  saveTextEl.value = '';
+  saveLabelEl.textContent = t('saveTitle');
+  copySaveButton.hidden = true;
+  applySaveButton.hidden = false;
+  setSaveFeedback(
+    t('saveHintImport'),
+    '',
+  );
+}
 
 const wheel = mountWheel(wheelRoot);
 const table = mountTable(tableRoot, (spot, cell) => {
@@ -75,7 +127,8 @@ for (const amount of CHIP_VALUES) {
   btn.type = 'button';
   btn.className = 'chip-face tray-chip';
   btn.dataset.chip = String(amount);
-  btn.setAttribute('aria-label', `面额 ${amount}`);
+  btn.dataset.chipLabel = String(amount);
+  btn.setAttribute('aria-label', t('chip', { n: amount }));
   paintChip(btn, amount);
   btn.addEventListener('click', () => game.selectChip(amount));
   chipRow.appendChild(btn);
@@ -109,12 +162,51 @@ function setBalance(next: number, animate: boolean): void {
   balanceFrame = window.requestAnimationFrame(tick);
 }
 
+const STREAK_NAME: Record<StreakKind, MessageKey> = {
+  red: 'streakRed',
+  black: 'streakBlack',
+  odd: 'streakOdd',
+  even: 'streakEven',
+  low: 'streakLow',
+  high: 'streakHigh',
+  d1: 'streakD1',
+  d2: 'streakD2',
+  d3: 'streakD3',
+  c1: 'streakC1',
+  c2: 'streakC2',
+  c3: 'streakC3',
+};
+
+function renderStreaks(history: readonly Pocket[]): void {
+  const root = document.querySelector<HTMLElement>('#streaks');
+  const row = document.querySelector<HTMLElement>('#streak-row');
+  const hint = document.querySelector<HTMLElement>('#streak-hint');
+  if (!root || !row || !hint) return;
+  const streaks = currentStreaks(history);
+  root.hidden = streaks.length === 0;
+  if (streaks.length === 0) {
+    row.replaceChildren();
+    return;
+  }
+  const tip = t('streakTip');
+  hint.title = tip;
+  hint.setAttribute('aria-label', tip);
+  row.replaceChildren();
+  for (const streak of streaks) {
+    const chip = document.createElement('span');
+    chip.className = 'streak-chip';
+    chip.textContent = t('streakChip', { n: streak.length, name: t(STREAK_NAME[streak.kind]) });
+    chip.title = tip;
+    row.appendChild(chip);
+  }
+}
+
 function renderHistory(history: readonly Pocket[]): void {
   historyNode.replaceChildren();
   if (history.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'history-empty';
-    empty.textContent = '还没有开奖';
+    empty.textContent = t('historyEmpty');
     historyNode.appendChild(empty);
     return;
   }
@@ -173,25 +265,39 @@ function sync(): void {
   undoButton.disabled = !editing || state.placements.length === 0;
   clearButton.disabled = !editing || state.placements.length === 0;
   spinButton.disabled = !editing;
-  spinButton.textContent = state.phase === 'spinning' ? '转动中' : state.phase === 'settling' ? '结算中' : '开转';
+  const spinKey = state.phase === 'spinning' ? 'spinning' : state.phase === 'settling' ? 'settling' : 'spin';
+  spinButton.textContent = t(spinKey);
+  spinButton.dataset.i18n = spinKey;
 
   table.render(state);
   renderHistory(state.history);
+  renderStreaks(state.history);
   renderHub(state.phase, state.result, state.reduceMotion);
   sfxInput.checked = state.sfx;
   motionInput.checked = state.reduceMotion;
 
   if (enteredSpin) wheel.highlight(null);
   if (enteredSpin && state.pending) {
-    if (state.sfx) playSpin();
+    stopRoll();
+    if (state.sfx) stopRoll = startRoll();
     const duration = spinDurationMs(state.reduceMotion, Math.random());
     wheel.spinTo(state.pending, duration, () => game.finishSpin());
   }
   if (enteredSettle) {
+    stopRoll();
+    stopRoll = () => {};
     if (state.result) wheel.highlight(state.result);
-    if (state.sfx) {
-      if ((state.roundNet ?? 0) > 0) playWin();
-      else playLose();
+    const net = state.roundNet ?? 0;
+    const straight = state.result !== null && state.placements.some(
+      (placement) => placement.spot.startsWith('n:') && isWinningSpot(placement.spot, state.result as Pocket),
+    );
+    if (net > 0) {
+      const big = isBigWin(net, totalStake(state.placements), straight);
+      showWinBanner(t(big ? 'bigWin' : 'youWin', { amount: formatChips(net) }));
+      celebrate(big, state.reduceMotion);
+      if (state.sfx) playWin(big);
+    } else if (state.sfx) {
+      playLose();
     }
     window.clearTimeout(settleTimer);
     settleTimer = window.setTimeout(() => game.completeRound(), settleHoldMs(state.reduceMotion));
@@ -229,7 +335,7 @@ document.querySelector<HTMLButtonElement>('#open-rules')?.addEventListener('clic
 document.querySelector<HTMLButtonElement>('#open-reset')?.addEventListener('click', () => {
   if (game.getState().phase !== 'betting') {
     settingsDialog.close();
-    game.flash('请等待本局结束');
+    game.flash({ k: 'wait' });
     return;
   }
   settingsDialog.close();
@@ -254,10 +360,92 @@ for (const dialog of [settingsDialog, rulesDialog, resetDialog]) {
   });
 }
 
+exportSaveBtn.addEventListener('click', () => showSavePanel('export'));
+importSaveBtn.addEventListener('click', () => {
+  showSavePanel('import');
+  saveTextEl.focus();
+});
+
+copySaveButton.addEventListener('click', async () => {
+  const code = saveTextEl.value;
+  let copied = false;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(code);
+      copied = true;
+    }
+  } catch {
+    copied = false;
+  }
+  if (!copied) {
+    saveTextEl.focus();
+    saveTextEl.select();
+    try {
+      copied = document.execCommand('copy');
+    } catch {
+      copied = false;
+    }
+  }
+  if (!copied) {
+    setSaveFeedback(t('copyFail'), 'bad');
+    return;
+  }
+  setSaveFeedback(t('copied'), 'ok');
+});
+
+applySaveButton.addEventListener('click', () => {
+  const result = decodeSaveCode(saveTextEl.value);
+  if (!result.ok) {
+    setSaveFeedback(t(SAVE_ERRORS[result.error]), 'bad');
+    return;
+  }
+  if (game.getState().phase !== 'betting') {
+    setSaveFeedback(t('importWait'), 'bad');
+    game.flash({ k: 'wait' });
+    return;
+  }
+  if (!game.replacePersisted(result.data)) {
+    setSaveFeedback(t('importFail'), 'bad');
+    return;
+  }
+  const state = game.getState();
+  wheel.jumpTo(state.result);
+  wheel.highlight(null);
+  setSaveFeedback(t('imported'), 'ok');
+});
+
 window.addEventListener('pagehide', () => game.persist());
 window.addEventListener('beforeunload', () => game.persist());
 
 const initial = game.getState();
 if (initial.result) wheel.jumpTo(initial.result);
+function fillRules(): void {
+  const rules = document.querySelector('#rules-body');
+  if (!rules) return;
+  rules.replaceChildren();
+  for (const key of ['rulesIntro', 'rulesWheel', 'rulesPay', 'rulesPlay', 'rulesSave'] as const) {
+    const p = document.createElement('p');
+    p.textContent = t(key);
+    rules.appendChild(p);
+  }
+}
+
+function refreshCopy(): void {
+  applyDom(document);
+  document.title = t('docTitleGame');
+  for (const btn of chipTray.querySelectorAll<HTMLButtonElement>('.tray-chip')) {
+    btn.setAttribute('aria-label', t('chip', { n: btn.dataset.chipLabel ?? '' }));
+  }
+  fillRules();
+  sync();
+}
+
+const langMenu = document.querySelector<HTMLElement>('#settings-dialog .lang-menu');
+if (langMenu) mountLanguageMenu(langMenu);
+
+document.addEventListener('pointerdown', () => unlockAudio(), { once: true });
+refreshCopy();
+onLocale(refreshCopy);
 sync();
 game.subscribe(sync);
+mountAgeNotice();

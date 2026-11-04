@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { createGame } from './game.ts';
+import { setLocale } from './i18n.ts';
 import { WHEEL_ORDER, type Pocket } from './rules.ts';
-import { parsePersisted, STARTING_BALANCE, type Persisted, type Store } from './storage.ts';
+import { decodeSaveCode, encodeSaveCode, parsePersisted, STARTING_BALANCE, type Persisted, type Store } from './storage.ts';
+
+beforeEach(() => setLocale('zh-CN'));
 
 function unitFor(pocket: Pocket): number {
   return (WHEEL_ORDER.indexOf(pocket) + 0.01) / 38;
@@ -188,6 +191,43 @@ describe('persistence', () => {
     expect(game.getState().placements).toHaveLength(0);
     expect(game.getState().history[0]).toBe('8');
     expect(store.read()?.balance).toBe(1000);
+  });
+
+  it('exports the settled bankroll and restores a save code', () => {
+    const store = memoryStore();
+    const game = createGame({ store, random: () => unitFor('8') });
+    game.selectChip(100);
+    game.place('red');
+    expect(game.getState().balance).toBe(900);
+    expect(game.toPersisted().balance).toBe(1000);
+    expect(game.toPersisted().history).toEqual([]);
+
+    const incoming = decodeSaveCode(encodeSaveCode({
+      v: 1,
+      balance: 640,
+      history: ['00', '8', '19'],
+      sfx: true,
+      reduceMotion: true,
+    }));
+    expect(incoming.ok).toBe(true);
+    if (!incoming.ok) return;
+    expect(game.replacePersisted(incoming.data)).toBe(true);
+    expect(game.getState().balance).toBe(640);
+    expect(game.getState().placements).toHaveLength(0);
+    expect(game.getState().history).toEqual(['00', '8', '19']);
+    expect(game.getState().result).toBe('00');
+    expect(game.getState().sfx).toBe(true);
+    expect(game.getState().reduceMotion).toBe(true);
+    expect(game.getState().statusText).toBe('已从存档码恢复');
+    expect(store.read()).toEqual(incoming.data);
+
+    game.selectChip(25);
+    game.place('black');
+    game.spin();
+    expect(game.replacePersisted(incoming.data)).toBe(false);
+    expect(game.getState().phase).toBe('spinning');
+    expect(game.getState().statusText).toBe('请等待本局结束');
+    expect(store.read()?.history[0]).toBe('8');
   });
 
   it('rejects a corrupt save', () => {

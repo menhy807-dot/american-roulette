@@ -1,7 +1,7 @@
+import { renderNotice, type GameNotice } from './i18n.ts';
+export type { GameNotice };
 import {
-  describeSpot,
   formatChips,
-  formatOutcome,
   isChip,
   isSpotId,
   pocketFromUnit,
@@ -11,7 +11,7 @@ import {
   type Placement,
   type Pocket,
 } from './rules.ts';
-import { STARTING_BALANCE, type Persisted, type Store } from './storage.ts';
+import { parsePersisted, STARTING_BALANCE, type Persisted, type Store } from './storage.ts';
 
 export type Phase = 'betting' | 'spinning' | 'settling';
 
@@ -47,8 +47,12 @@ export interface Game {
   setSfx(on: boolean): void;
   setReduceMotion(on: boolean): void;
   resetBalance(): void;
-  flash(text: string): void;
+  flash(notice: GameNotice): void;
   persist(): void;
+  /** Settled snapshot. Chips still on the felt are counted back into the balance. */
+  toPersisted(): Persisted;
+  /** Replace the settled snapshot. Refuses while a round is spinning or settling. */
+  replacePersisted(data: Persisted): boolean;
 }
 
 export interface GameOptions {
@@ -57,7 +61,7 @@ export interface GameOptions {
   reduceMotionDefault?: boolean;
 }
 
-const IDLE_STATUS = '选择筹码，再点击注区下注';
+const IDLE_NOTICE: GameNotice = { k: 'idle' };
 
 function cryptoUnit(): number {
   const buf = new Uint32Array(1);
@@ -88,7 +92,7 @@ export function createGame(options: GameOptions = {}): Game {
   let history = saved.history.slice(0, 10);
   let sfx = saved.sfx;
   let reduceMotion = saved.reduceMotion;
-  let statusText = IDLE_STATUS;
+  let notice: GameNotice = IDLE_NOTICE;
   let statusAlert = false;
   let statusNonce = 0;
   let roundNet: number | null = null;
@@ -110,7 +114,7 @@ export function createGame(options: GameOptions = {}): Game {
       history: history.slice(),
       sfx,
       reduceMotion,
-      statusText,
+      statusText: renderNotice(notice),
       statusAlert,
       statusNonce,
       roundNet,
@@ -146,14 +150,14 @@ export function createGame(options: GameOptions = {}): Game {
     store?.save(projected());
   }
 
-  function setStatus(text: string): void {
-    statusText = text;
+  function setStatus(next: GameNotice): void {
+    notice = next;
     statusAlert = false;
     emit();
   }
 
-  function flash(text: string): void {
-    statusText = text;
+  function flash(next: GameNotice): void {
+    notice = next;
     statusAlert = true;
     statusNonce += 1;
     emit();
@@ -172,7 +176,12 @@ export function createGame(options: GameOptions = {}): Game {
     pending = null;
     roundCommitted = true;
     phase = 'settling';
-    statusText = formatOutcome(pocket, net);
+    notice = {
+      k: 'outcome',
+      pocket,
+      net,
+      amount: formatChips(Math.abs(net)),
+    };
     statusAlert = false;
     save();
   }
@@ -191,44 +200,48 @@ export function createGame(options: GameOptions = {}): Game {
     place(spot) {
       if (phase !== 'betting' || !isSpotId(spot)) return;
       if (selectedChip > balance) {
-        flash('余额不足');
+        flash({ k: 'insufficient' });
         return;
       }
       balance -= selectedChip;
       placements = [...placements, { id: nextId, spot, amount: selectedChip }];
       nextId += 1;
-      const copy = describeSpot(spot);
-      setStatus(`${copy.title} 已加 ${formatChips(selectedChip)} · 本局 ${formatChips(totalStake(placements))}`);
+      setStatus({
+        k: 'placed',
+        spot,
+        amount: formatChips(selectedChip),
+        total: formatChips(totalStake(placements)),
+      });
     },
     undo() {
       if (phase !== 'betting') return;
       const last = placements[placements.length - 1];
       if (!last) {
-        flash('没有可撤销的下注');
+        flash({ k: 'nothingUndo' });
         return;
       }
       placements = placements.slice(0, -1);
       balance += last.amount;
       setStatus(
         placements.length === 0
-          ? '已撤销上一注'
-          : `已撤销上一注 · 本局 ${formatChips(totalStake(placements))}`,
+          ? { k: 'undone' }
+          : { k: 'undoneMore', total: formatChips(totalStake(placements)) },
       );
     },
     clearBets() {
       if (phase !== 'betting') return;
       if (placements.length === 0) {
-        flash('桌面上没有筹码');
+        flash({ k: 'emptyTable' });
         return;
       }
       balance += totalStake(placements);
       placements = [];
-      setStatus('已清空本局下注');
+      setStatus({ k: 'cleared' });
     },
     spin() {
       if (phase !== 'betting') return;
       if (placements.length === 0) {
-        flash('请先至少下一注');
+        flash({ k: 'needBet' });
         return;
       }
       pending = pocketFromUnit(random());
@@ -236,7 +249,7 @@ export function createGame(options: GameOptions = {}): Game {
       roundNet = null;
       roundReturn = 0;
       phase = 'spinning';
-      statusText = '轮盘转动中…';
+      notice = { k: 'spinning' };
       statusAlert = false;
       // The pocket is already chosen. Persist the settled outcome so a reload cannot void it.
       save();
@@ -266,7 +279,7 @@ export function createGame(options: GameOptions = {}): Game {
     },
     resetBalance() {
       if (phase !== 'betting') {
-        flash('请等待本局结束');
+        flash({ k: 'wait' });
         return;
       }
       balance = STARTING_BALANCE;
@@ -274,10 +287,33 @@ export function createGame(options: GameOptions = {}): Game {
       placements = [];
       roundNet = null;
       roundReturn = 0;
-      setStatus('余额已重置为 1,000');
+      setStatus({ k: 'reset' });
       save();
     },
     flash,
     persist: save,
+    toPersisted: projected,
+    replacePersisted(data) {
+      if (phase !== 'betting') {
+        flash({ k: 'wait' });
+        return false;
+      }
+      const parsed = parsePersisted(data, data.reduceMotion);
+      if (!parsed) return false;
+      balance = parsed.balance;
+      lastSettledBalance = parsed.balance;
+      placements = [];
+      history = parsed.history.slice(0, 10);
+      result = history[0] ?? null;
+      sfx = parsed.sfx;
+      reduceMotion = parsed.reduceMotion;
+      pending = null;
+      roundCommitted = true;
+      roundNet = null;
+      roundReturn = 0;
+      save();
+      setStatus({ k: 'imported' });
+      return true;
+    },
   };
 }

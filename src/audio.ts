@@ -58,10 +58,26 @@ export function playSpin(): void {
   tone(180, 0.22, 'sine', 0.02);
 }
 
-export function playWin(): void {
-  tone(523.25, 0.16, 'sine', 0.04, 0);
-  tone(659.25, 0.16, 'sine', 0.04, 0.08);
-  tone(783.99, 0.28, 'sine', 0.045, 0.16);
+export function playWin(big = false): void {
+  tone(523.25, 0.16, 'sine', 0.045, 0);
+  tone(659.25, 0.16, 'sine', 0.045, 0.09);
+  tone(783.99, 0.22, 'sine', 0.05, 0.18);
+  tone(1046.5, big ? 0.42 : 0.3, 'triangle', big ? 0.05 : 0.03, 0.28);
+  if (big) tone(1318.5, 0.36, 'sine', 0.04, 0.42);
+}
+
+let rollTimer = 0;
+
+/** Soft clacks while the ball travels. Returns a stop function. */
+export function startRoll(): () => void {
+  window.clearInterval(rollTimer);
+  const tick = () => {
+    noise(0.04, 0.02, 700 + Math.random() * 900);
+    tone(120 + Math.random() * 50, 0.04, 'sine', 0.01);
+  };
+  tick();
+  rollTimer = window.setInterval(tick, 120 + Math.floor(Math.random() * 80));
+  return () => window.clearInterval(rollTimer);
 }
 
 export function playLose(): void {

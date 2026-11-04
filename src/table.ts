@@ -1,4 +1,5 @@
 import { paintChip } from './chips.ts';
+import { cellLabel, onLocale, spotDetail, spotTitle, t } from './i18n.ts';
 import type { GameState } from './game.ts';
 import {
   colorOf,
@@ -16,25 +17,84 @@ export interface TableController {
   cell(spot: SpotId): HTMLButtonElement | undefined;
 }
 
-function makeButton(className: string, label: string): HTMLButtonElement {
-  const el = document.createElement('button');
-  el.type = 'button';
-  el.className = `cell ${className}`;
-  const face = document.createElement('span');
-  face.className = 'face-label';
+function setFace(face: HTMLElement, label: string): void {
+  face.replaceChildren();
   if (label.includes('\n')) {
     const [main, sub] = label.split('\n');
     face.append(document.createTextNode(main ?? ''));
     const small = document.createElement('small');
     small.textContent = sub ?? '';
     face.appendChild(small);
-  } else {
-    face.textContent = label;
+    return;
   }
+  face.textContent = label;
+}
+
+function makeButton(className: string, spot: string): HTMLButtonElement {
+  const el = document.createElement('button');
+  el.type = 'button';
+  el.className = `cell ${className}`;
+  const face = document.createElement('span');
+  face.className = 'face-label';
+  setFace(face, cellLabel(spot));
   const stack = document.createElement('span');
   stack.className = 'stack';
   el.append(face, stack);
   return el;
+}
+
+/** Grid placement for one spot. Portrait uses six numbers per row so the felt fits a phone. */
+export function tablePlacement(spot: SpotId, portrait: boolean): { column: string; row: string } {
+  if (!portrait) {
+    if (spot === 'n:0') return { column: '1', row: '1 / 4' };
+    if (spot === 'n:00') return { column: '1', row: '4 / 7' };
+    if (spot.startsWith('n:')) {
+      const n = Number(spot.slice(2));
+      const column = Math.floor((n - 1) / 3) + 2;
+      const mod = n % 3;
+      const rowStart = mod === 0 ? 1 : mod === 2 ? 3 : 5;
+      return { column: String(column), row: `${rowStart} / ${rowStart + 2}` };
+    }
+    const columns: Record<string, { column: string; row: string }> = {
+      c3: { column: '14', row: '1 / 3' },
+      c2: { column: '14', row: '3 / 5' },
+      c1: { column: '14', row: '5 / 7' },
+      d1: { column: '2 / 6', row: '1' },
+      d2: { column: '6 / 10', row: '1' },
+      d3: { column: '10 / 14', row: '1' },
+      low: { column: '2 / 4', row: '1' },
+      even: { column: '4 / 6', row: '1' },
+      red: { column: '6 / 8', row: '1' },
+      black: { column: '8 / 10', row: '1' },
+      odd: { column: '10 / 12', row: '1' },
+      high: { column: '12 / 14', row: '1' },
+    };
+    return columns[spot] ?? { column: '1', row: '1' };
+  }
+
+  if (spot === 'n:0') return { column: '1 / 4', row: '1' };
+  if (spot === 'n:00') return { column: '4 / 7', row: '1' };
+  if (spot.startsWith('n:')) {
+    const n = Number(spot.slice(2));
+    const line = Math.ceil(n / 6);
+    const col = ((n - 1) % 6) + 1;
+    return { column: String(col), row: String(line + 1) };
+  }
+  const portraitColumns: Record<string, { column: string; row: string }> = {
+    c1: { column: '1 / 3', row: '8' },
+    c2: { column: '3 / 5', row: '8' },
+    c3: { column: '5 / 7', row: '8' },
+    d1: { column: '1 / 3', row: '1' },
+    d2: { column: '3 / 5', row: '1' },
+    d3: { column: '5 / 7', row: '1' },
+    low: { column: '1', row: '1' },
+    even: { column: '2', row: '1' },
+    red: { column: '3', row: '1' },
+    black: { column: '4', row: '1' },
+    odd: { column: '5', row: '1' },
+    high: { column: '6', row: '1' },
+  };
+  return portraitColumns[spot] ?? { column: '1', row: '1' };
 }
 
 export function mountTable(root: HTMLElement, onPlace: (spot: SpotId, cell: HTMLButtonElement) => void): TableController {
@@ -47,10 +107,8 @@ export function mountTable(root: HTMLElement, onPlace: (spot: SpotId, cell: HTML
   head.className = 'felt-head';
   const title = document.createElement('p');
   title.className = 'felt-title';
-  title.textContent = '美式赌桌';
   const note = document.createElement('p');
   note.className = 'felt-note';
-  note.textContent = '直注 35:1 · 红黑单双大小 1:1 · 打与列 2:1';
   const banner = document.createElement('p');
   banner.className = 'lock-banner';
   banner.id = 'lock-banner';
@@ -86,14 +144,10 @@ export function mountTable(root: HTMLElement, onPlace: (spot: SpotId, cell: HTML
     cells.set(spot, el);
   };
 
-  const zero = makeButton('green zero', '0');
-  zero.style.gridColumn = '1';
-  zero.style.gridRow = '1 / 4';
+  const zero = makeButton('green zero', 'n:0');
   register('n:0', zero);
 
-  const doubleZero = makeButton('green zero', '00');
-  doubleZero.style.gridColumn = '1';
-  doubleZero.style.gridRow = '4 / 7';
+  const doubleZero = makeButton('green zero', 'n:00');
   register('n:00', doubleZero);
 
   numberGrid.append(zero, doubleZero);
@@ -102,60 +156,67 @@ export function mountTable(root: HTMLElement, onPlace: (spot: SpotId, cell: HTML
     const pocket = String(n) as Pocket;
     const spot = `n:${pocket}` as SpotId;
     const color = colorOf(pocket);
-    const el = makeButton(`num ${color}`, String(n));
-    const column = Math.floor((n - 1) / 3) + 2;
-    const mod = n % 3;
-    const rowStart = mod === 0 ? 1 : mod === 2 ? 3 : 5;
-    el.style.gridColumn = String(column);
-    el.style.gridRow = `${rowStart} / ${rowStart + 2}`;
+    const el = makeButton(`num ${color}`, spot);
     register(spot, el);
     numberGrid.appendChild(el);
   }
 
-  const columns: { spot: SpotId; label: string; row: string }[] = [
-    { spot: 'c3', label: '2:1\n第三列', row: '1 / 3' },
-    { spot: 'c2', label: '2:1\n第二列', row: '3 / 5' },
-    { spot: 'c1', label: '2:1\n第一列', row: '5 / 7' },
-  ];
-  for (const column of columns) {
-    const el = makeButton('outside column', column.label);
-    el.style.gridColumn = '14';
-    el.style.gridRow = column.row;
-    register(column.spot, el);
+  const columns: SpotId[] = ['c3', 'c2', 'c1'];
+  for (const spot of columns) {
+    const el = makeButton('outside column', spot);
+    register(spot, el);
     numberGrid.appendChild(el);
   }
 
-  const dozenSpots: { spot: SpotId; label: string; column: string }[] = [
-    { spot: 'd1', label: '第一打\n1–12', column: '2 / 6' },
-    { spot: 'd2', label: '第二打\n13–24', column: '6 / 10' },
-    { spot: 'd3', label: '第三打\n25–36', column: '10 / 14' },
-  ];
-  for (const dozen of dozenSpots) {
-    const el = makeButton('outside dozen', dozen.label);
-    el.style.gridColumn = dozen.column;
-    register(dozen.spot, el);
+  for (const spot of ['d1', 'd2', 'd3'] as const) {
+    const el = makeButton('outside dozen', spot);
+    register(spot, el);
     dozenGrid.appendChild(el);
   }
 
-  const outsideSpots: { spot: SpotId; label: string; column: string; extra?: string }[] = [
-    { spot: 'low', label: '小\n1–18', column: '2 / 4' },
-    { spot: 'even', label: '双', column: '4 / 6' },
-    { spot: 'red', label: '红', column: '6 / 8', extra: 'red-bet' },
-    { spot: 'black', label: '黑', column: '8 / 10', extra: 'black-bet' },
-    { spot: 'odd', label: '单', column: '10 / 12' },
-    { spot: 'high', label: '大\n19–36', column: '12 / 14' },
+  const outsideSpots: { spot: SpotId; extra?: string }[] = [
+    { spot: 'low' },
+    { spot: 'even' },
+    { spot: 'red', extra: 'red-bet' },
+    { spot: 'black', extra: 'black-bet' },
+    { spot: 'odd' },
+    { spot: 'high' },
   ];
   for (const item of outsideSpots) {
-    const el = makeButton(`outside even-money ${item.extra ?? ''}`, item.label);
-    el.style.gridColumn = item.column;
+    const el = makeButton(`outside even-money ${item.extra ?? ''}`, item.spot);
     register(item.spot, el);
     outsideGrid.appendChild(el);
   }
+
+  const layoutCells = (portrait: boolean) => {
+    board.dataset.layout = portrait ? 'portrait' : 'landscape';
+    for (const [spot, el] of cells) {
+      const next = tablePlacement(spot, portrait);
+      el.style.gridColumn = next.column;
+      el.style.gridRow = next.row;
+    }
+  };
+
+  const portraitQuery = window.matchMedia('(max-width: 720px)');
+  const applyLayout = () => layoutCells(portraitQuery.matches);
+  applyLayout();
+  portraitQuery.addEventListener('change', applyLayout);
 
   board.append(numberGrid, dozenGrid, outsideGrid);
   scroller.appendChild(board);
   felt.append(head, scroller);
   root.appendChild(felt);
+
+  function relabel(): void {
+    title.textContent = t('feltTitle');
+    note.textContent = t('feltOdds');
+    for (const [spot, el] of cells) {
+      const face = el.querySelector<HTMLElement>('.face-label');
+      if (face) setFace(face, cellLabel(spot));
+    }
+  }
+  relabel();
+  onLocale(relabel);
 
   const tip = document.getElementById('tooltip');
   let tipSpot: SpotId | null = null;
@@ -172,14 +233,13 @@ export function mountTable(root: HTMLElement, onPlace: (spot: SpotId, cell: HTML
 
   function positionTip(anchor: HTMLElement): void {
     if (!tip || !tipSpot) return;
-    const copy = describeSpot(tipSpot);
     const stake = Number(anchor.dataset.stake ?? '0');
     tip.replaceChildren();
     const strong = document.createElement('strong');
-    strong.textContent = `${copy.title} · ${copy.detail}`;
+    strong.textContent = `${spotTitle(tipSpot)} · ${spotDetail(tipSpot)}`;
     const odds = document.createElement('span');
     odds.className = 'odds';
-    odds.textContent = `赔率 ${copy.odds}:1`;
+    odds.textContent = `${describeSpot(tipSpot).odds}:1`;
     tip.append(strong, odds);
     if (stake > 0) {
       const line = document.createElement('span');
@@ -206,7 +266,7 @@ export function mountTable(root: HTMLElement, onPlace: (spot: SpotId, cell: HTML
       const locked = state.phase !== 'betting';
       board.classList.toggle('locked', locked);
       banner.hidden = !locked;
-      banner.textContent = state.phase === 'settling' ? '结算中' : '本局已封盘';
+      banner.textContent = state.phase === 'settling' ? t('lockSettle') : t('lockSpin');
 
       const wins = state.phase === 'settling' && state.result ? new Set(winningSpots(state.result)) : null;
       for (const [spot, cell] of cells) {
@@ -218,11 +278,12 @@ export function mountTable(root: HTMLElement, onPlace: (spot: SpotId, cell: HTML
         const lastHit = state.phase !== 'spinning' && state.result !== null && spot === `n:${state.result}`;
         cell.classList.toggle('last-hit', lastHit);
         const copy = describeSpot(spot);
+        const name = spotTitle(spot);
         cell.setAttribute(
           'aria-label',
           stake > 0
-            ? `${copy.title}，${copy.odds} 比 1，已下 ${formatChips(stake)}`
-            : `${copy.title}，${copy.odds} 比 1`,
+            ? `${name}, ${copy.odds}:1, ${formatChips(stake)}`
+            : `${name}, ${copy.odds}:1`,
         );
 
         const mine = state.placements.filter((placement) => placement.spot === spot);
