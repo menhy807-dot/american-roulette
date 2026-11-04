@@ -5,6 +5,7 @@ import { celebrate, isBigWin, showWinBanner } from './celebrate.ts';
 import { paintChip } from './chips.ts';
 import { createGame, type Phase } from './game.ts';
 import { applyDom, mountLanguageMenu, onLocale, t, type MessageKey } from './i18n.ts';
+import { currentStreaks, type StreakKind } from './streaks.ts';
 import { CHIP_VALUES, colorOf, formatChips, isWinningSpot, totalStake, type Chip, type Pocket } from './rules.ts';
 import { browserStore, decodeSaveCode, encodeSaveCode, type SaveCodeError } from './storage.ts';
 import { mountAgeNotice } from './notice.ts';
@@ -161,6 +162,45 @@ function setBalance(next: number, animate: boolean): void {
   balanceFrame = window.requestAnimationFrame(tick);
 }
 
+const STREAK_NAME: Record<StreakKind, MessageKey> = {
+  red: 'streakRed',
+  black: 'streakBlack',
+  odd: 'streakOdd',
+  even: 'streakEven',
+  low: 'streakLow',
+  high: 'streakHigh',
+  d1: 'streakD1',
+  d2: 'streakD2',
+  d3: 'streakD3',
+  c1: 'streakC1',
+  c2: 'streakC2',
+  c3: 'streakC3',
+};
+
+function renderStreaks(history: readonly Pocket[]): void {
+  const root = document.querySelector<HTMLElement>('#streaks');
+  const row = document.querySelector<HTMLElement>('#streak-row');
+  const hint = document.querySelector<HTMLElement>('#streak-hint');
+  if (!root || !row || !hint) return;
+  const streaks = currentStreaks(history);
+  root.hidden = streaks.length === 0;
+  if (streaks.length === 0) {
+    row.replaceChildren();
+    return;
+  }
+  const tip = t('streakTip');
+  hint.title = tip;
+  hint.setAttribute('aria-label', tip);
+  row.replaceChildren();
+  for (const streak of streaks) {
+    const chip = document.createElement('span');
+    chip.className = 'streak-chip';
+    chip.textContent = t('streakChip', { n: streak.length, name: t(STREAK_NAME[streak.kind]) });
+    chip.title = tip;
+    row.appendChild(chip);
+  }
+}
+
 function renderHistory(history: readonly Pocket[]): void {
   historyNode.replaceChildren();
   if (history.length === 0) {
@@ -231,6 +271,7 @@ function sync(): void {
 
   table.render(state);
   renderHistory(state.history);
+  renderStreaks(state.history);
   renderHub(state.phase, state.result, state.reduceMotion);
   sfxInput.checked = state.sfx;
   motionInput.checked = state.reduceMotion;
