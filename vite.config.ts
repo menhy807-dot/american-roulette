@@ -6,6 +6,7 @@ export default defineConfig({
       input: {
         main: 'index.html',
         roulette: 'roulette/index.html',
+        freezer: 'freezer/index.html',
       },
     },
   },

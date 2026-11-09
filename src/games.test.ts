@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import freezerHtml from '../freezer/index.html?raw';
 import lobbyHtml from '../index.html?raw';
 import rouletteHtml from '../roulette/index.html?raw';
 import { GAMES } from './games.ts';
@@ -7,10 +8,13 @@ import { SITE_NAME } from './site.ts';
 import { tablePlacement } from './table.ts';
 
 describe('game lobby catalog', () => {
-  it('lists roulette as the only playable game and keeps placeholders marked soon', () => {
+  it('lists roulette and freezer night shift as playable and keeps placeholders marked soon', () => {
     const playable = GAMES.filter((game) => game.status === 'play');
-    expect(playable.map((game) => game.id)).toEqual(['american-roulette']);
+    expect(playable.map((game) => game.id)).toEqual(['american-roulette', 'freezer-night-shift']);
     expect(playable[0]?.href).toBe('/roulette/');
+    expect(playable[1]?.href).toBe('/freezer/');
+    expect(playable[1]?.cover).toBe('/freezer-cover.png');
+    expect(playable[1]?.titleZh).toBe('冷柜夜班');
     const soon = GAMES.filter((game) => game.status === 'soon');
     expect(soon.length).toBeGreaterThanOrEqual(1);
     expect(soon.every((game) => game.href === null)).toBe(true);
@@ -29,6 +33,11 @@ describe('game lobby catalog', () => {
     expect(roulette).toContain('https://harrystory.com/og-image.png');
     expect(roulette).toContain('rel="canonical" href="https://harrystory.com/roulette/"');
     expect(roulette).toContain('href="/"');
+    expect(freezerHtml).toContain('https://harrystory.com/freezer/');
+    expect(freezerHtml).toContain('https://harrystory.com/og-freezer.png');
+    expect(freezerHtml).toContain('rel="canonical" href="https://harrystory.com/freezer/"');
+    expect(freezerHtml).toContain('href="/"');
+    expect(freezerHtml).toContain('/src/freezer/main.ts');
   });
 
   it('keeps the age notice key stable so it is asked once site-wide', () => {

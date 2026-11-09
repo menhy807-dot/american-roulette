@@ -109,18 +109,21 @@ function renderGame(game: CatalogGame): HTMLElement {
 }
 
 function paintCards(): void {
-  const names: Record<string, 'cardRoulette' | 'cardBlackjack' | 'cardSlots'> = {
+  const names: Record<string, 'cardRoulette' | 'cardFreezer' | 'cardBlackjack' | 'cardSlots'> = {
     'american-roulette': 'cardRoulette',
+    'freezer-night-shift': 'cardFreezer',
     blackjack: 'cardBlackjack',
     slots: 'cardSlots',
   };
-  const locals: Record<string, 'cardRouletteLocal' | 'cardBlackjackLocal' | 'cardSlotsLocal'> = {
+  const locals: Record<string, 'cardRouletteLocal' | 'cardFreezerLocal' | 'cardBlackjackLocal' | 'cardSlotsLocal'> = {
     'american-roulette': 'cardRouletteLocal',
+    'freezer-night-shift': 'cardFreezerLocal',
     blackjack: 'cardBlackjackLocal',
     slots: 'cardSlotsLocal',
   };
-  const descs: Record<string, 'cardRouletteDesc' | 'cardBlackjackDesc' | 'cardSlotsDesc'> = {
+  const descs: Record<string, 'cardRouletteDesc' | 'cardFreezerDesc' | 'cardBlackjackDesc' | 'cardSlotsDesc'> = {
     'american-roulette': 'cardRouletteDesc',
+    'freezer-night-shift': 'cardFreezerDesc',
     blackjack: 'cardBlackjackDesc',
     slots: 'cardSlotsDesc',
   };
