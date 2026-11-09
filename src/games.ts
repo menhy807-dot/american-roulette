@@ -28,6 +28,16 @@ export const GAMES: readonly CatalogGame[] = [
     status: 'play',
   },
   {
+    id: 'freezer-night-shift',
+    title: 'Freezer Night Shift',
+    titleZh: '冷柜夜班',
+    description: 'Gauges fib. Listen, cut the bad cabinets, and save the aisle.',
+    descriptionZh: '表盘会撒谎。听嗡鸣，切断坏柜，保住这一排。',
+    href: '/freezer/',
+    cover: '/freezer-cover.png',
+    status: 'play',
+  },
+  {
     id: 'blackjack',
     title: 'Blackjack',
     titleZh: '二十一点',

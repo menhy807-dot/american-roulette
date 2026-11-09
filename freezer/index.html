@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#10181c" />
+    <meta
+      name="description"
+      content="Freezer Night Shift — a one-minute fictional supermarket aisle. No real money, no prizes. 18+. 冷柜夜班，虚构超市，不涉及真钱。"
+    />
+    <title>Freezer Night Shift – Free Play</title>
+    <meta property="og:title" content="Freezer Night Shift – Free Play" />
+    <meta
+      property="og:description"
+      content="A one-minute fictional aisle. Gauges fib. No real money, no prizes. 18+."
+    />
+    <meta property="og:type" content="website" />
+    <link rel="canonical" href="https://harrystory.com/freezer/" />
+    <meta property="og:url" content="https://harrystory.com/freezer/" />
+    <meta property="og:image" content="https://harrystory.com/og-freezer.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="A row of supermarket freezers at night, one glowing warm, titled Freezer Night Shift – Free Play" />
+    <meta property="og:site_name" content="Harry Story Games" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Freezer Night Shift – Free Play" />
+    <meta
+      name="twitter:description"
+      content="A one-minute fictional aisle. Gauges fib. No real money, no prizes. 18+."
+    />
+    <meta name="twitter:image" content="https://harrystory.com/og-freezer.png" />
+    <meta name="twitter:image:alt" content="A row of supermarket freezers at night, one glowing warm, titled Freezer Night Shift – Free Play" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body class="freezer-body">
+    <div class="app freezer-app">
+      <header class="topbar freezer-top">
+        <a class="home-link" href="/" data-i18n-aria="home" aria-label="Back to lobby">
+          <span aria-hidden="true">‹</span>
+          <span class="home-text" data-i18n="home">Lobby</span>
+        </a>
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <h1 data-i18n="freezerTitle">Freezer Night Shift</h1>
+            <p data-i18n="freezerSub">One minute · fictional aisle</p>
+          </div>
+        </div>
+        <div class="freezer-tools">
+          <button type="button" class="help-mark" id="help" data-i18n-aria="freezerHelp" aria-label="Hints">?</button>
+          <div class="lang-menu">
+            <button type="button" class="lang-button" data-lang-button aria-haspopup="listbox" aria-expanded="false" data-i18n-aria="lang">English</button>
+            <ul class="lang-list" data-lang-list hidden role="listbox"></ul>
+          </div>
+        </div>
+      </header>
+
+      <div class="freezer-play">
+        <main class="freezer-stage">
+          <div class="freezer-hud">
+            <div class="hud-power">
+              <span class="hud-k" data-i18n="freezerPower">Power</span>
+              <div class="power-bar" aria-hidden="true"><div id="power-fill"></div></div>
+              <span class="hud-v" id="power-num">360</span>
+            </div>
+            <div class="hud-time">
+              <span class="hud-k" data-i18n="freezerTime">Time</span>
+              <strong id="time-num">1:00</strong>
+            </div>
+            <div class="hud-probes" id="probe-meter">
+              <span class="hud-k" data-i18n="freezerProbes">Probes</span>
+              <span class="pips" id="pips"></span>
+            </div>
+          </div>
+
+          <div class="aisle-window">
+            <button type="button" class="aisle-nav prev" id="prev" data-i18n-aria="freezerPrev" aria-label="Previous cabinet">‹</button>
+            <div class="aisle-track" id="track" tabindex="0" data-i18n-aria="freezerAisle" aria-label="Freezer aisle"></div>
+            <button type="button" class="aisle-nav next" id="next" data-i18n-aria="freezerNext" aria-label="Next cabinet">›</button>
+          </div>
+          <div class="mini-row" id="minis" role="tablist"></div>
+        </main>
+
+        <footer class="freezer-dock">
+          <button type="button" class="breaker" id="breaker" aria-pressed="false">
+            <span class="breaker-visual" aria-hidden="true"><span class="breaker-knob"></span></span>
+            <span class="breaker-copy">
+              <strong id="breaker-label">Cut the line</strong>
+            </span>
+          </button>
+          <div class="control-row">
+            <button type="button" class="btn-probe" id="probe">
+              <span data-i18n="freezerProbe">Manual check</span>
+              <small id="probe-left">3 left</small>
+            </button>
+            <button type="button" class="btn-clock" id="clock" data-i18n="freezerClockOut" disabled>Clock out</button>
+          </div>
+          <p class="status" id="status" role="status" aria-live="polite"></p>
+          <p class="legal" data-i18n="legal">18+ entertainment only. No real money, no real-world prizes.</p>
+        </footer>
+
+        <div class="sheet" id="intro">
+          <div class="sheet-card" role="dialog" aria-labelledby="intro-title">
+            <p class="age-kicker" data-i18n="freezerSub">One minute · fictional aisle</p>
+            <h2 id="intro-title" data-i18n="freezerIntroTitle">The dials are in a mood.</h2>
+            <p data-i18n="freezerIntroBody">One fictional minute in a supermarket aisle. The dials do not all tell the truth.</p>
+            <ul class="rule-list">
+              <li data-i18n="freezerRuleRattle">Rattle and a cold dial: the dial is lying. Cut the line.</li>
+              <li data-i18n="freezerRuleSteady">Steady hum: leave that cabinet on the line.</li>
+              <li data-i18n="freezerRuleWarble">Warble: it could be either way. Check before you cut.</li>
+              <li data-i18n="freezerRulePower">Three checks. Backup coils drink power, so clock out once the bad cabinets are off.</li>
+            </ul>
+            <button type="button" class="btn-age" id="start" data-i18n="freezerStart">Start the shift</button>
+          </div>
+        </div>
+
+        <div class="sheet end-sheet" id="end" hidden>
+          <div class="sheet-card end-card" role="dialog" aria-labelledby="end-title">
+            <p class="grade-kicker" data-i18n="freezerGrade">Grade</p>
+            <p class="grade-letter" id="grade">S</p>
+            <h2 id="end-title">Shift survived</h2>
+            <p class="end-stat" id="end-saved">5 freezers saved</p>
+            <p class="end-stat" id="end-time">48s left</p>
+            <p class="end-reason" id="end-reason"></p>
+            <p class="end-share" data-i18n="freezerShare">How many freezers did you save?</p>
+            <button type="button" class="btn-age" id="again" data-i18n="freezerAgain">Another shift</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/freezer/main.ts"></script>
+  </body>
+</html>
